@@ -6,11 +6,12 @@ output:
   pdf_document:
     toc: true
     toc_depth: 2
+    number_sections: true
 ---
 
 ## Introduction
 
-This project builds an Investment Performance Tracker in R using real-time and historical financial data. The goal is to enable data-driven investment decisions through trend visualization and price forecasting. The tracker collects stock data, calculates return metrics, visualizes price trends with moving averages, and generates short-term forecasts using ARIMA models.
+This project builds an Investment Performance Tracker in R using real-time and historical financial data. The goal is to enable data-driven investment decisions through trend visualization and price forecasting. The tracker collects historical stock data, computes return metrics, visualizes price trends with moving averages, and generates short-term forecasts using ARIMA models.
 
 ```{r setup, include = TRUE, message = FALSE, warning = FALSE}
 knitr::opts_chunk$set(echo = TRUE, fig.width=7, fig.height=5)
@@ -71,7 +72,7 @@ ggplot(stock_returns, aes(x = date, y = daily_return, color = ticker)) +
        color = "Ticker") +
   theme_minimal()
 ```
- - The next plot shows the cumulative returns of stocks for the 3 companies over time. This shows how much my investment would have grown during the time period.
+ - The next plot shows the cumulative returns of stocks for the 3 companies over time. This reflects the growth of a $1 investment over the analysis period.
 
 ```{r}
 stock_cumulative <- stock_returns %>%
@@ -121,11 +122,11 @@ ggplot(filter(stock_ma, ticker == "AAPL"), aes(x = date)) +
 
 ## Forecasting
 
-We fit an ARIMA model to historical adjusted prices and forecast the next 30–90 trading days.
+I fit an ARIMA model to historical adjusted prices and forecast the next 30–90 trading days.
 
 The forecast shows expected price trends and confidence intervals based on recent patterns.
 
-Continuing to focus on AAPL, I fit an ARIMA model.
+For demonstration, I focus on AAPL and fit an ARIMA model to its adjusted price series.
 ```{r}
 aapl_ts <- stock_returns %>%
   filter(ticker == "AAPL") %>%
@@ -149,7 +150,7 @@ autoplot(forecast_aapl) +
 
 ## Model Evaluation
 
-We split the data into training and test sets to evaluate model performance using RMSE and MAE.
+I split the data into training and test sets to evaluate model performance using RMSE and MAE.
 
 The actual prices during the test period are compared with model forecasts to assess predictive accuracy.
 
@@ -175,12 +176,12 @@ forecast_test <- forecast(model, h = h)
 
 rmse <- sqrt(mean((forecast_test$mean - test_data)^2, na.rm = TRUE))
 mae <- mean(abs(forecast_test$mean - test_data), na.rm = TRUE)
-
-cat("RMSE:", round(rmse, 4), "\n")
-cat("MAE:", round(mae, 4), "\n")
 ```
 
-Plot to visualize the Predicted Forecasting Values vs. Actual Values :
+RMSE: `r round(rmse, 4)`  
+MAE: `r round(mae, 4)`
+
+The following plot compares predicted vs. actual prices during the test period:
  - blue dashed line : forecasted path
  - shaded regions : 80% and 90% confidence intervals
  - red line : actual data
@@ -212,5 +213,3 @@ ggplot(forecast_df, aes(x = date)) +
 ## Conclusion
 
 This Investment Performance Tracker provides an end-to-end solution for real-time data ingestion, trend analysis, and price forecasting. It supports data-driven investment strategies by automating data collection and enabling rapid insights into stock behavior.
-
-Future improvements could include fundamental data integration (e.g., P/E ratios), portfolio optimization, and a Shiny-based interactive dashboard.
