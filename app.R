@@ -1,11 +1,3 @@
-#
-# This is a Shiny web application. You can run the application by clicking
-# the 'Run App' button above.
-#
-# Find out more about building applications with Shiny here:
-#
-#    https://shiny.posit.co/
-#
 
 library(shiny)
 library(quantmod)
@@ -17,12 +9,13 @@ library(tidyr)
 
 tickers <- c("AAPL", "MSFT", "GOOGL")
 
-# Define UI for application that draws a histogram
+# --- UI ---
+
 ui <- navbarPage("Investment Performance Tracker",
                  tabPanel("Price Trend",
                           sidebarLayout(
                             sidebarPanel(
-                              selectInput("tickers", "Select Stocks:", choices = tickers,
+                              selectInput("tickers", "Select Stocks to Compare:", choices = tickers,
                                           selected = c("AAPL", "MSFT"),
                                           multiple = TRUE),
                               sliderInput("ma_window",
@@ -50,7 +43,8 @@ ui <- navbarPage("Investment Performance Tracker",
                             ),
                             mainPanel(
                               plotOutput("forecastPlot"),
-                              verbatimTextOutput("forecastMetrics")
+                              verbatimTextOutput("forecastMetrics"),
+                              plotOutput("forecastAccuracyPlot")
                             )
                           )
                           ),
@@ -61,11 +55,18 @@ ui <- navbarPage("Investment Performance Tracker",
                  )
 )
 
-# Define server logic required to draw a histogram
+# --- Server ---
+
 server <- function(input, output) {
+  
+  # Pull and combine data for selected tickers
 
   stock_data <- reactive({
     req(input$tickers)
+    
+    if (length(input$tickers) == 0) {
+      return(tibble())
+    }
     
     data_list <- lapply(input$tickers, function(ticker) {
       tryCatch({
@@ -73,7 +74,6 @@ server <- function(input, output) {
         df <- fortify.zoo(df) %>% as_tibble()
         colnames(df)[1] <- "date"
         
-        # Rename the price columns safely if they exist
         if (ncol(df) == 7) {
           names(df)[2:7] <- c("open", "high", "low", "close", "volume", "adjusted")
         }
@@ -88,6 +88,8 @@ server <- function(input, output) {
     
     bind_rows(data_list)
   })
+  
+  # Separate forecast dataset (single ticker)
   
   forecast_data <- reactive({
     req(input$forecast_ticker)
@@ -111,6 +113,8 @@ server <- function(input, output) {
     })
   })
     
+  # --- Price Plot ---
+  
     output$pricePlot <- renderPlot({
       df <- stock_data() %>%
         arrange(date) %>%
@@ -121,11 +125,13 @@ server <- function(input, output) {
       ggplot(df, aes(x = date, y = adjusted, color = ticker)) +
         geom_line(alpha = 0.5) +
         geom_line(aes(y = ma), linetype = "dashed") +
-        labs(title = "Adjusted Price with Moving Average",
+        labs(title = paste("Adjusted Price with", input$ma_window, "Day MA"),
              x = "Date", y = "Adjusted Price") +
         scale_y_continuous(labels = scales::dollar_format()) +
         theme_minimal()
     })
+    
+    # --- Daily Returns ---
     
     output$returnsPlot <- renderPlot({
       df <- stock_data() %>%
@@ -142,6 +148,8 @@ server <- function(input, output) {
         theme_minimal()
     })
     
+    # --- Cumulative Returns ---
+    
     output$cumulativePlot <- renderPlot({
       df <- stock_data()
       req(nrow(df) > 0)
@@ -155,7 +163,6 @@ server <- function(input, output) {
         ) %>%
         ungroup()
       
-      # Assign and return the plot
       p <- ggplot(df, aes(x = date, y = cumulative_return, color = ticker)) +
         geom_line(size = 1, alpha = 0.8) +
         labs(
@@ -168,22 +175,19 @@ server <- function(input, output) {
       return(p)
     })
     
+    # --- Forecast Plot ---
+    
     output$forecastPlot <- renderPlot({
       df <- forecast_data()
-      req(nrow(df) > 2)  # need at least 2 points to fit a time series
+      req(nrow(df) > 2)
       
-      # Debug: print structure
-      print("Forecast data columns:")
-      print(colnames(df))
-      print(head(df))
       
-      # Ensure adjusted column is numeric
       if (!"adjusted" %in% colnames(df)) {
         validate("No 'adjusted' price data found.")
         return(NULL)
       }
       
-      ts_data <- ts(df$adjusted, frequency = 252)  # ~252 trading days/year
+      ts_data <- ts(df$adjusted, frequency = 252)
       
       model <- auto.arima(ts_data)
       forecasted <- forecast(model, h = input$horizon)
@@ -196,37 +200,69 @@ server <- function(input, output) {
         theme_minimal()
     })
     
+    # --- Forecast Evaluation ---
+    
     output$forecastMetrics <- renderPrint({
       df <- forecast_data()
-      req(nrow(df) > 30)
+      req(nrow(df) > input$horizon + 10)
       
-      # Parameters
-      test_size <- 30
       horizon <- input$horizon
       
-      # Split into training/test sets
       df <- df %>% arrange(date)
-      train <- head(df$adjusted, -test_size)
-      test <- tail(df$adjusted, test_size)
-      
-      # Fit model and forecast
+      train <- head(df$adjusted, -horizon)
+      test <- tail(df$adjusted, horizon)
+
       ts_train <- ts(train, frequency = 252)
       model <- auto.arima(ts_train)
-      fc <- forecast(model, h = length(test))
-      
-      # Compute error metrics
+      fc <- forecast(model, h = horizon)
+
       rmse <- sqrt(mean((fc$mean - test)^2, na.rm = TRUE))
       mae <- mean(abs(fc$mean - test), na.rm = TRUE)
-      
-      # Print results
-      cat("Model Evaluation (on last", test_size, "days):\n")
+
+      cat("Model Evaluation\n")
+      cat("----------------\n")
+      cat("  Forecast Horizon:", horizon, "days\n")
       cat("  RMSE:", round(rmse, 3), "\n")
       cat("  MAE :", round(mae, 3), "\n")
     })
     
-    observe({
-      print(paste("Loaded tickers:", paste(input$tickers, collapse = ", ")))
-      print(head(stock_data()))
+    # --- Forecast Accuracy ---
+    
+    output$forecastAccuracyPlot <- renderPlot({
+      df <- forecast_data()
+      req(nrow(df) > input$horizon + 10)
+      
+      df <- df %>% arrange(date)
+      horizon <- input$horizon
+      train <- head(df$adjusted, -horizon)
+      test <- tail(df$adjusted, horizon)
+      test_dates <- tail(df$date, horizon)
+      
+      ts_train <- ts(train, frequency = 252)
+      model <- auto.arima(ts_train)
+      fc <- forecast(model, h = horizon)
+      
+      forecast_df <- data.frame(
+        date = test_dates,
+        actual = as.numeric(test),
+        forecast = as.numeric(fc$mean),
+        lower_80 = fc$lower[, 1],
+        upper_80 = fc$upper[, 1],
+        lower_95 = fc$lower[, 2],
+        upper_95 = fc$upper[, 2]
+      )
+      
+      ggplot(forecast_df, aes(x = date)) +
+        geom_ribbon(aes(ymin = lower_95, ymax = upper_95), fill = "lightblue", alpha = 0.3) +
+        geom_ribbon(aes(ymin = lower_80, ymax = upper_80), fill = "lightblue", alpha = 0.5) +
+        geom_line(aes(y = actual), color = "red", size = 1.1) +
+        geom_line(aes(y = forecast), color = "blue", linetype = "dashed", size = 1) +
+        labs(
+          title = paste(input$forecast_ticker, "Forecast vs. Actual (Last", horizon, "Days)"),
+          x = "Date", y = "Adjusted Price",
+          caption = "Red = Actual | Blue Dashed = Forecast | Shaded = Confidence Interval"
+        ) +
+        theme_minimal()
     })
 }
 

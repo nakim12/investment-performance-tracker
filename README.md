@@ -23,7 +23,7 @@ This project started as an RMarkdown-based analysis and evolved into a full-feat
 - View adjusted prices with user-defined moving averages
 - Visualize daily and cumulative returns
 - Forecast future prices using ARIMA models
-- Dynamically report forecast error metrics (RMSE, MAE)
+- View model error metrics (RMSE, MAE) and compare forecasts to actuals
 
 ---
 
