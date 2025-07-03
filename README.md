@@ -30,57 +30,34 @@ This project started as an RMarkdown-based analysis and evolved into a full-feat
 ## Technologies Used
 
 - **R** / **RStudio**
-- [`quantmod`](https://cran.r-project.org/web/packages/quantmod/index.html)
-- [`forecast`](https://cran.r-project.org/web/packages/forecast/index.html)
-- `dplyr`, `ggplot2`, `lubridate`, `zoo`, `tidyr`, `scales`, `tseries`
-- **Shiny** (for the web app)
-- **RMarkdown** (for the static report)
+- `quantmod`, `forecast`, `tseries`, `zoo`
+- `dplyr`, `ggplot2`, `lubridate`, `scales`, `tidyr`
+- **Shiny** for interactivity
+- **RMarkdown** for reproducible reporting
 
 ---
 
 ## Live Demo
 
 Try the app: 
-[▶️ Investment Performance Tracker](https://nathankim.shinyapps.io/investment-performance-tracker/)
-
-This interactive Shiny app allows users to:
-- Select multiple stocks (e.g., AAPL, MSFT, GOOGL)
-- Visualize price trends and moving averages
-- Compare cumulative returns
-- Forecast future prices using ARIMA models
-- Monitor investment performance over time
+[▶️ Investment Performance Tracke (Shiny App)](https://nathankim.shinyapps.io/investment-performance-tracker/)
 
 ---
 
-## 📂 Repository Structure
+## Repository Structure
 
 Investment-Performance-Tracker/
-├── Investment Performance Tracker # RMarkdown Project
-├── shinyapp/
-│ └── app.r # Shiny app (interactive)
-├── README.md # This file
-
----
-
-
-## Screenshots
-
-> _(Optional: add plots or UI screenshots here to showcase your app)_
-
----
-
-## Future Improvements
-
-- Add CSV download for filtered data
-- Include additional tickers or ETF categories
-- Add user authentication and bookmarking
-- Improve layout with `bslib` theming
+├── app.R                          # Shiny app (interactive dashboard)
+├── Investment Performance Tracker.Rmd   # RMarkdown report (static analysis)
+├── Investment Performance Tracker.Rproj # RStudio project file
+├── README.md                      # Project description and usage
+├── .gitignore                     # Git exclusion rules
 
 ---
 
 ## Author
 
-Nathan Kim  
+**Nathan Kim**
 [GitHub](https://github.com/nakim12) • [LinkedIn](https://linkedin.com/in/kim-a-nathan)
 
 ---
