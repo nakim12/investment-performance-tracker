@@ -46,12 +46,14 @@ Try the app:
 
 ## Repository Structure
 
+```
 Investment-Performance-Tracker/
 ├── app.R                          # Shiny app (interactive dashboard)
 ├── Investment Performance Tracker.Rmd   # RMarkdown report (static analysis)
 ├── Investment Performance Tracker.Rproj # RStudio project file
 ├── README.md                      # Project description and usage
 ├── .gitignore                     # Git exclusion rules
+```
 
 ---
 
