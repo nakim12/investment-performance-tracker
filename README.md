@@ -40,7 +40,7 @@ This project started as an RMarkdown-based analysis and evolved into a full-feat
 ## Live Demo
 
 Try the app: 
-[▶️ Investment Performance Tracke (Shiny App)](https://nathankim.shinyapps.io/investment-performance-tracker/)
+[▶️ Investment Performance Tracker (Shiny App)](https://nathankim.shinyapps.io/investment-performance-tracker/)
 
 ---
 
