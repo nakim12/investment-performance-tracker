@@ -6,7 +6,7 @@ An interactive R-based application for analyzing, comparing, and forecasting inv
 
 ## Overview
 
-This project started as an RMarkdown-based analysis and evolved into a full-featured [Shiny](https://shiny.posit.co/) web app. Users can explore real-time stock performance, view technical indicators, compare historical returns, and generate price forecasts with error metrics.
+This project started as an RMarkdown-based analysis and evolved into a full-featured [Shiny](https://shiny.posit.co/) web app. Users can analyze real-time stock data, visualize trends, compare returns, evaluate forecasting models, and perform risk analysis by sector.
 
 ---
 
@@ -19,20 +19,28 @@ This project started as an RMarkdown-based analysis and evolved into a full-feat
 - Reported forecast accuracy using RMSE and MAE
 
 ### Shiny App (Interactive Dashboard)
-- Select and compare multiple tickers (AAPL, MSFT, GOOGL)
-- View adjusted prices with user-defined moving averages
-- Visualize daily and cumulative returns
-- Forecast future prices using ARIMA models
-- View model error metrics (RMSE, MAE) and compare forecasts to actuals
+- **Sector Filtering**: Choose from Technology, Financial, Healthcare, Consumer, and Energy sectors.
+- **Multi-Ticker Comparison**: Select and compare multiple tickers simultaneously.
+- **Price Trend Visualization**: View adjusted prices with customizable moving averages.
+- **Daily & Cumulative Returns**: Visualize short- and long-term return patterns.
+- **Return Distribution**: Explore histograms of daily return volatility for each stock.
+- **ARIMA Forecasting**:
+  - Conservative vs. Aggressive forecast modes
+  - Model backtesting with evaluation metrics (RMSE, MAE, MAPE)
+  - Forecast accuracy plots comparing predicted vs. actual prices
+- **Risk Analysis Tab**:
+  - Metrics: Volatility, Sharpe Ratio, Max Drawdown, Value at Risk (VaR)
+  - Correlation Heatmap: Analyze how selected tickers move together
+  - Risk-Return Scatter: Visualize tradeoffs between volatility and performance
 
 ---
 
 ## Technologies Used
 
 - **R** / **RStudio**
-- `quantmod`, `forecast`, `tseries`, `zoo`
+- `quantmod`, `forecast`, `tseries`, `zoo`, `reshape2`
 - `dplyr`, `ggplot2`, `lubridate`, `scales`, `tidyr`
-- **Shiny** for interactivity
+- **Shiny** + `shinycssloaders` for interactivity
 - **RMarkdown** for reproducible reporting
 
 ---
