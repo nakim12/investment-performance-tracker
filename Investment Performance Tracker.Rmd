@@ -9,7 +9,7 @@ output:
     number_sections: true
 ---
 
-## Introduction
+# Introduction
 
 This project builds an Investment Performance Tracker in R using real-time and historical financial data. The goal is to enable data-driven investment decisions through trend visualization and price forecasting. The tracker collects historical stock data, computes return metrics, visualizes price trends with moving averages, and generates short-term forecasts using ARIMA models.
 
@@ -23,9 +23,10 @@ library(dplyr)
 library(zoo)
 library(forecast)
 library(tseries)
+library(tidyr)
 ```
 
-## Data Collection and Preparation
+# Data Collection and Preparation
 
 I use the `quantmod` package to pull historical stock data from Yahoo Finance. Stocks included in this analysis are AAPL, MSFT, and GOOGL.
 
@@ -48,7 +49,7 @@ stock_data <- lapply(tickers, function(ticker) {
   bind_rows()
 ```
 
-## Return Analysis
+# Return Analysis
 
 I calculate daily returns for each stock to assess short-term performance and volatility.
 
@@ -90,7 +91,7 @@ ggplot(stock_cumulative, aes(x = date, y = cumulative_return, color = ticker)) +
   theme_minimal()
 ```
 
-## Trend Visualization
+# Trend Visualization
 
 We plot the adjusted prices for each stock along with 20-day and 50-day moving averages to identify short- and medium-term trends.
 
@@ -120,7 +121,7 @@ ggplot(filter(stock_ma, ticker == "AAPL"), aes(x = date)) +
   theme_minimal()
 ```
 
-## Forecasting
+# Forecasting
 
 I fit an ARIMA model to historical adjusted prices and forecast the next 30–90 trading days.
 
@@ -148,7 +149,7 @@ autoplot(forecast_aapl) +
   theme_minimal()
 ```
 
-## Model Evaluation
+# Model Evaluation
 
 I split the data into training and test sets to evaluate model performance using RMSE and MAE.
 
@@ -210,6 +211,33 @@ ggplot(forecast_df, aes(x = date)) +
   theme_minimal()
 ```
 
-## Conclusion
+# Risk Analysis
 
-This Investment Performance Tracker provides an end-to-end solution for real-time data ingestion, trend analysis, and price forecasting. It supports data-driven investment strategies by automating data collection and enabling rapid insights into stock behavior.
+To assess portfolio risk, we compute metrics such as:
+
+- **Annual Volatility**: Measures variability in daily returns.
+- **Sharpe Ratio**: Risk-adjusted performance.
+- **Maximum Drawdown**: Largest drop from peak to trough.
+- **Value at Risk (VaR 95%)**: Estimated maximum loss in a day with 95% confidence.
+
+These metrics allow users to understand the trade-offs between risk and reward across multiple stocks.
+
+
+```{r, warning = FALSE}
+risk_data <- stock_returns %>%
+  filter(ticker %in% tickers) %>%
+  group_by(ticker) %>%
+  summarise(
+    volatility = sd(daily_return, na.rm = TRUE) * sqrt(252),
+    sharpe = mean(daily_return, na.rm = TRUE) / sd(daily_return, na.rm = TRUE) * sqrt(252),
+    max_drawdown = min(cumprod(1 + replace_na(daily_return, 0)) - 1, na.rm = TRUE),
+    var_95 = quantile(daily_return, 0.05, na.rm = TRUE)
+  )
+
+knitr::kable(risk_data, digits = 4)
+```
+
+
+# Conclusion
+
+This Investment Performance Tracker provides an end-to-end solution for real-time data ingestion, trend analysis, and price forecasting. It supports data-driven investment strategies by automating data collection and enabling rapid insights into stock behavior. In addition to tracking price trends and returns, the tracker offers interactive tools for analyzing volatility, risk-adjusted performance, sector-specific filtering, and forecasting accuracy. Together, these features make the tracker a powerful resource for understanding market dynamics and evaluating investment opportunities.
