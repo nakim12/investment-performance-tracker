@@ -1,0 +1,11 @@
+# Files excluded from rsconnect / shinyapps.io bundles (local publish too).
+.github/
+scripts/
+.git/
+*.Rmd
+README.md
+README.html
+*.Rproj
+.Rproj.user/
+yes.Rmd
+PROJECT_PLAN.md

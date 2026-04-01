@@ -46,7 +46,10 @@ jobs:
       - name: Install dependencies
         uses: r-lib/actions/setup-r-dependencies@v2
         with:
-          extra-packages: any::rsconnect
+          extra-packages: |
+            any::rsconnect
+            any::cpp11
+            any::RcppArmadillo
 
       - name: Deploy
         run: Rscript scripts/deploy_shinyapps.R

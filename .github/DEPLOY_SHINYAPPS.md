@@ -33,4 +33,6 @@ Or use **Actions → Deploy to shinyapps.io → Run workflow** after secrets are
 ## Notes
 
 - The workflow uses `DESCRIPTION` only so `r-lib/actions` can install CRAN dependencies; the project is still a Shiny app, not a published R package.
+- `scripts/deploy_shinyapps.R` deploys only `app.R` and `R/*.R` so the R Markdown report is not bundled (avoids renv snapshot errors for knitr/rmarkdown on CI).
+- `.rscignore` excludes the same paths if you publish from RStudio without the script.
 - Local `rsconnect/` credentials are gitignored; CI does not use them.

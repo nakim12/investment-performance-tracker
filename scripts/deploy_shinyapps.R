@@ -24,10 +24,20 @@ rsconnect::setAccountInfo(
   secret = secret
 )
 
+# Only bundle the Shiny app. If the whole repo is bundled, rsconnect's renv
+# snapshot pulls in knitr/rmarkdown/tseries from the Rmd and fails CI.
+r_files <- if (dir.exists("R")) {
+  list.files("R", pattern = "\\.[Rr]$", full.names = TRUE)
+} else {
+  character()
+}
+app_files <- c("app.R", sort(r_files))
+
 rsconnect::deployApp(
   appDir        = ".",
   appPrimaryDoc = "app.R",
   appName       = app_name,
+  appFiles      = app_files,
   lint          = FALSE,
   forceUpdate   = TRUE
 )
