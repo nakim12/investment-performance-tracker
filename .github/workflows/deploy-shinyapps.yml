@@ -1,0 +1,52 @@
+# Deploy Shiny app to https://www.shinyapps.io/ on every push to main.
+#
+# One-time setup: add these repository secrets
+# (Settings → Secrets and variables → Actions → New repository secret):
+#
+#   SHINYAPPS_ACCOUNT  — shinyapps.io username (e.g. nathankim)
+#   SHINYAPPS_TOKEN    — from https://www.shinyapps.io/admin/#/tokens
+#   SHINYAPPS_SECRET   — shown once when you create the token
+#
+# Optional:
+#   SHINYAPPS_APP_NAME — defaults to investment-performance-tracker
+#
+# See .github/DEPLOY_SHINYAPPS.md for more detail.
+
+name: Deploy to shinyapps.io
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+
+    env:
+      SHINYAPPS_ACCOUNT: ${{ secrets.SHINYAPPS_ACCOUNT }}
+      SHINYAPPS_TOKEN: ${{ secrets.SHINYAPPS_TOKEN }}
+      SHINYAPPS_SECRET: ${{ secrets.SHINYAPPS_SECRET }}
+      SHINYAPPS_APP_NAME: ${{ secrets.SHINYAPPS_APP_NAME }}
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup R
+        uses: r-lib/actions/setup-r@v2
+        with:
+          r-version: release
+          use-public-rspm: true
+
+      - name: Install dependencies
+        uses: r-lib/actions/setup-r-dependencies@v2
+        with:
+          extra-packages: any::rsconnect
+
+      - name: Deploy
+        run: Rscript scripts/deploy_shinyapps.R

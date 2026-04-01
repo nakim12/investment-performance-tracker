@@ -1,0 +1,20 @@
+Package: InvestmentPerformanceTracker
+Title: Shiny App (CI dependency manifest)
+Version: 0.0.0.9000
+Authors@R: person("Nathan", "Kim", role = c("aut", "cre"))
+Description: This repository is a Shiny application, not a published R package.
+    The DESCRIPTION file exists so GitHub Actions can install CRAN dependencies
+    using r-lib/actions setup-r-dependencies.
+License: MIT
+Encoding: UTF-8
+Imports:
+    dplyr,
+    forecast,
+    ggplot2,
+    quantmod,
+    reshape2,
+    scales,
+    shiny,
+    shinycssloaders,
+    tidyr,
+    zoo
