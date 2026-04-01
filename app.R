@@ -142,7 +142,13 @@ ui <- navbarPage(
     uiOutput("portfolio_results_section")
   ),
 
-  # ── Tab 2: Price Trend (existing) ──────────────────────────────────────────
+  # ── Tab 2: Diagnosis ───────────────────────────────────────────────────────
+
+  tabPanel("Diagnosis",
+    uiOutput("diagnosis_content")
+  ),
+
+  # ── Tab 3: Price Trend (existing) ──────────────────────────────────────────
 
   tabPanel("Price Trend",
     sidebarLayout(
@@ -294,7 +300,11 @@ server <- function(input, output, session) {
     benchmark_name    = "SPY",
     metrics           = NULL,
     weights_frac      = NULL,
-    sector_weights    = NULL
+    sector_weights    = NULL,
+    drawdown          = NULL,
+    risk_contrib      = NULL,
+    diversification   = NULL,
+    holding_cor       = NULL
   )
 
   # -- Add holding ----------------------------------------------------------
@@ -491,6 +501,12 @@ server <- function(input, output, session) {
 
       sector_w <- compute_sector_weights(holdings$ticker, holdings$weight)
 
+      incProgress(0.1, detail = "Computing diagnostics...")
+      dd_series <- compute_drawdown_series(port_returns)
+      risk_c    <- compute_risk_contribution(price_data, weights_frac)
+      div_ratio <- compute_diversification_ratio(price_data, weights_frac)
+      hold_cor  <- compute_holding_correlations(price_data)
+
       portfolio$price_data        <- price_data
       portfolio$returns           <- port_returns
       portfolio$benchmark_data    <- benchmark_data
@@ -499,6 +515,10 @@ server <- function(input, output, session) {
       portfolio$metrics           <- metrics
       portfolio$weights_frac      <- weights_frac
       portfolio$sector_weights    <- sector_w
+      portfolio$drawdown          <- dd_series
+      portfolio$risk_contrib      <- risk_c
+      portfolio$diversification   <- div_ratio
+      portfolio$holding_cor       <- hold_cor
       portfolio$analyzed          <- TRUE
 
       incProgress(0.3, detail = "Done!")
@@ -567,19 +587,9 @@ server <- function(input, output, session) {
         )
       ),
 
-      if (length(insights) > 0) {
-        div(class = "insight-panel",
-          h4("Portfolio Insights"),
-          tags$ul(lapply(insights, tags$li))
-        )
-      },
-
-      br(),
-      fluidRow(
-        column(12,
-          h4("Detailed Metrics"),
-          tableOutput("portfolio_detail_table")
-        )
+      tags$p(class = "text-muted text-center", style = "margin-top: 15px; font-size: 14px;",
+        "See the ", tags$b("Diagnosis"),
+        " tab for detailed risk analysis, rolling metrics, diversification diagnostics, and insights."
       )
     )
   })
@@ -614,9 +624,316 @@ server <- function(input, output, session) {
       theme(legend.position = "bottom")
   })
 
-  # -- Detail metrics table -------------------------------------------------
+  # ══════════════════════════════════════════════════════════════════════════
+  # DIAGNOSIS TAB
+  # ══════════════════════════════════════════════════════════════════════════
 
-  output$portfolio_detail_table <- renderTable({
+  # -- Rolling metrics reactive (recomputes when window slider changes) -----
+
+  diag_rolling <- reactive({
+    req(portfolio$analyzed, portfolio$returns)
+    window <- if (!is.null(input$diag_rolling_window)) input$diag_rolling_window else 30
+    compute_rolling_metrics(portfolio$returns, portfolio$benchmark_returns, window)
+  })
+
+  # -- Diagnosis content (dynamic UI) ---------------------------------------
+
+  output$diagnosis_content <- renderUI({
+    if (!portfolio$analyzed) {
+      return(div(class = "empty-state",
+        tags$h4("No portfolio analyzed yet"),
+        tags$p("Go to ", tags$b("Build Portfolio"),
+               " to create and analyze a portfolio first.")
+      ))
+    }
+
+    m  <- portfolio$metrics
+    sw <- portfolio$sector_weights
+    rc <- portfolio$risk_contrib
+    dr <- portfolio$diversification
+
+    ret_cls     <- if (m$annual_return >= 0) "kpi-positive" else "kpi-negative"
+    sharp_cls   <- if (m$sharpe_ratio > 0.5) "kpi-positive" else
+                   if (m$sharpe_ratio >= 0)  "kpi-neutral"  else "kpi-negative"
+    sortino_val <- if (!is.na(m$sortino_ratio)) sprintf("%.2f", m$sortino_ratio) else "N/A"
+    sortino_cls <- if (!is.na(m$sortino_ratio) && m$sortino_ratio > 0.5) "kpi-positive" else
+                   if (!is.na(m$sortino_ratio) && m$sortino_ratio >= 0)  "kpi-neutral"  else "kpi-negative"
+    beta_val    <- if (!is.null(m$beta) && !is.na(m$beta)) sprintf("%.2f", m$beta) else "N/A"
+
+    insights <- generate_diagnosis_insights(m, sw, rc, dr)
+
+    tagList(
+      div(class = "builder-header",
+        h3("Portfolio Diagnosis"),
+        tags$p(class = "text-muted",
+          sprintf("Analysis of %d holdings over the selected period against %s.",
+                  nrow(portfolio$holdings), portfolio$benchmark_name))
+      ),
+
+      # ── KPI Cards ──
+      fluidRow(
+        column(2, tags$div(class = "kpi-card",
+          tags$div(class = paste("kpi-value", ret_cls),
+            sprintf("%.1f%%", m$annual_return * 100)),
+          tags$div(class = "kpi-label", "Annual Return")
+        )),
+        column(2, tags$div(class = "kpi-card",
+          tags$div(class = "kpi-value kpi-neutral",
+            sprintf("%.1f%%", m$annual_volatility * 100)),
+          tags$div(class = "kpi-label", "Volatility")
+        )),
+        column(2, tags$div(class = "kpi-card",
+          tags$div(class = paste("kpi-value", sharp_cls),
+            sprintf("%.2f", m$sharpe_ratio)),
+          tags$div(class = "kpi-label", "Sharpe Ratio")
+        )),
+        column(2, tags$div(class = "kpi-card",
+          tags$div(class = paste("kpi-value", sortino_cls), sortino_val),
+          tags$div(class = "kpi-label", "Sortino Ratio")
+        )),
+        column(2, tags$div(class = "kpi-card",
+          tags$div(class = "kpi-value kpi-negative",
+            sprintf("%.1f%%", m$max_drawdown * 100)),
+          tags$div(class = "kpi-label", "Max Drawdown")
+        )),
+        column(2, tags$div(class = "kpi-card",
+          tags$div(class = "kpi-value kpi-neutral", beta_val),
+          tags$div(class = "kpi-label", "Beta")
+        ))
+      ),
+
+      # ── Insights ──
+      if (length(insights) > 0) {
+        div(class = "insight-panel", style = "margin-top: 20px;",
+          h4("Portfolio Insights"),
+          tags$ul(lapply(insights, tags$li))
+        )
+      },
+
+      # ── Performance Section ──
+      tags$h4(style = "border-bottom: 2px solid #eee; padding-bottom: 8px; margin-top: 30px;",
+        "Performance"),
+      fluidRow(
+        column(7, withSpinner(plotOutput("diag_perf_chart", height = "380px"),
+          type = 4, color = "darkturquoise")),
+        column(5, withSpinner(plotOutput("diag_drawdown_chart", height = "380px"),
+          type = 4, color = "darkturquoise"))
+      ),
+
+      # ── Rolling Metrics Section ──
+      tags$h4(style = "border-bottom: 2px solid #eee; padding-bottom: 8px; margin-top: 30px;",
+        "Rolling Metrics"),
+      fluidRow(
+        column(3,
+          sliderInput("diag_rolling_window", "Rolling Window (days):",
+            min = 10, max = 60, value = 30, step = 5)
+        )
+      ),
+      fluidRow(
+        column(6, withSpinner(plotOutput("diag_rolling_vol_chart", height = "350px"),
+          type = 4, color = "darkturquoise")),
+        column(6, withSpinner(plotOutput("diag_rolling_sharpe_chart", height = "350px"),
+          type = 4, color = "darkturquoise"))
+      ),
+
+      # ── Risk & Diversification Section ──
+      tags$h4(style = "border-bottom: 2px solid #eee; padding-bottom: 8px; margin-top: 30px;",
+        "Risk & Diversification"),
+      fluidRow(
+        column(6, withSpinner(plotOutput("diag_risk_contrib_chart", height = "380px"),
+          type = 4, color = "darkturquoise")),
+        column(6, withSpinner(plotOutput("diag_corr_heatmap", height = "380px"),
+          type = 4, color = "darkturquoise"))
+      ),
+      fluidRow(
+        column(6, withSpinner(plotOutput("diag_sector_chart", height = "350px"),
+          type = 4, color = "darkturquoise")),
+        column(6,
+          wellPanel(style = "margin-top: 15px;",
+            h4("Diversification Score"),
+            tags$div(class = "kpi-card", style = "background: white;",
+              tags$div(class = paste("kpi-value",
+                if (!is.na(dr) && dr > 1.3) "kpi-positive" else
+                if (!is.na(dr) && dr > 1.0) "kpi-neutral"  else "kpi-negative"),
+                if (!is.na(dr)) sprintf("%.2f", dr) else "N/A"),
+              tags$div(class = "kpi-label", "Diversification Ratio")
+            ),
+            tags$p(class = "text-muted", style = "margin-top: 10px; font-size: 13px;",
+              "Values above 1.0 indicate diversification benefit.",
+              "Higher values mean holdings are less correlated,",
+              "reducing portfolio risk below the weighted average of individual risks."
+            )
+          )
+        )
+      ),
+
+      # ── Detailed Metrics Table ──
+      tags$h4(style = "border-bottom: 2px solid #eee; padding-bottom: 8px; margin-top: 30px;",
+        "Detailed Metrics"),
+      tableOutput("diag_metrics_table"),
+      br()
+    )
+  })
+
+  # -- Diagnosis: Cumulative performance chart ------------------------------
+
+  output$diag_perf_chart <- renderPlot({
+    req(portfolio$analyzed, portfolio$returns)
+
+    port_df <- portfolio$returns %>%
+      transmute(date, cumulative_return, series = "Portfolio")
+
+    if (!is.null(portfolio$benchmark_returns)) {
+      bench_df <- portfolio$benchmark_returns %>%
+        transmute(date, cumulative_return, series = portfolio$benchmark_name)
+      combined <- bind_rows(port_df, bench_df)
+    } else {
+      combined <- port_df
+    }
+
+    ggplot(combined, aes(x = date, y = cumulative_return, color = series)) +
+      geom_line(linewidth = 1.2) +
+      geom_hline(yintercept = 0, linetype = "dotted", color = "gray50") +
+      labs(title = "Cumulative Return", x = "Date", y = "Cumulative Return", color = "") +
+      scale_y_continuous(labels = scales::percent_format()) +
+      scale_color_manual(values = c("Portfolio" = "#2c3e50",
+                                    setNames("#e74c3c", portfolio$benchmark_name))) +
+      theme_minimal(base_size = 13) +
+      theme(legend.position = "bottom")
+  })
+
+  # -- Diagnosis: Drawdown chart --------------------------------------------
+
+  output$diag_drawdown_chart <- renderPlot({
+    req(portfolio$analyzed, portfolio$drawdown)
+
+    ggplot(portfolio$drawdown, aes(x = date, y = drawdown)) +
+      geom_area(fill = "#e74c3c", alpha = 0.3) +
+      geom_line(color = "#e74c3c", linewidth = 0.7) +
+      geom_hline(yintercept = 0, linewidth = 0.3) +
+      labs(title = "Portfolio Drawdown", x = "Date", y = "Drawdown") +
+      scale_y_continuous(labels = scales::percent_format()) +
+      theme_minimal(base_size = 13)
+  })
+
+  # -- Diagnosis: Rolling volatility ----------------------------------------
+
+  output$diag_rolling_vol_chart <- renderPlot({
+    rolling <- diag_rolling()
+    req(rolling)
+
+    plot_df <- tibble(date = rolling$date, Portfolio = rolling$rolling_vol)
+    if ("bench_rolling_vol" %in% names(rolling)) {
+      plot_df[[portfolio$benchmark_name]] <- rolling$bench_rolling_vol
+    }
+
+    plot_long <- plot_df %>%
+      pivot_longer(-date, names_to = "series", values_to = "volatility") %>%
+      filter(!is.na(volatility))
+
+    window <- if (!is.null(input$diag_rolling_window)) input$diag_rolling_window else 30
+
+    ggplot(plot_long, aes(x = date, y = volatility, color = series)) +
+      geom_line(linewidth = 1) +
+      labs(title = paste0("Rolling ", window, "-Day Volatility (Annualized)"),
+           x = "Date", y = "Volatility", color = "") +
+      scale_y_continuous(labels = scales::percent_format()) +
+      scale_color_manual(values = c("Portfolio" = "#2c3e50",
+                                    setNames("#e74c3c", portfolio$benchmark_name))) +
+      theme_minimal(base_size = 13) +
+      theme(legend.position = "bottom")
+  })
+
+  # -- Diagnosis: Rolling Sharpe --------------------------------------------
+
+  output$diag_rolling_sharpe_chart <- renderPlot({
+    rolling <- diag_rolling()
+    req(rolling)
+
+    plot_df <- tibble(date = rolling$date, Portfolio = rolling$rolling_sharpe)
+    if ("bench_rolling_sharpe" %in% names(rolling)) {
+      plot_df[[portfolio$benchmark_name]] <- rolling$bench_rolling_sharpe
+    }
+
+    plot_long <- plot_df %>%
+      pivot_longer(-date, names_to = "series", values_to = "sharpe") %>%
+      filter(!is.na(sharpe))
+
+    window <- if (!is.null(input$diag_rolling_window)) input$diag_rolling_window else 30
+
+    ggplot(plot_long, aes(x = date, y = sharpe, color = series)) +
+      geom_line(linewidth = 1) +
+      geom_hline(yintercept = 0, linetype = "dashed", color = "gray50", alpha = 0.5) +
+      labs(title = paste0("Rolling ", window, "-Day Sharpe Ratio (Annualized)"),
+           x = "Date", y = "Sharpe Ratio", color = "") +
+      scale_color_manual(values = c("Portfolio" = "#2c3e50",
+                                    setNames("#e74c3c", portfolio$benchmark_name))) +
+      theme_minimal(base_size = 13) +
+      theme(legend.position = "bottom")
+  })
+
+  # -- Diagnosis: Risk contribution -----------------------------------------
+
+  output$diag_risk_contrib_chart <- renderPlot({
+    req(portfolio$analyzed, portfolio$risk_contrib)
+    rc <- portfolio$risk_contrib
+
+    ggplot(rc, aes(x = reorder(ticker, pct_contribution), y = pct_contribution,
+                   fill = ticker)) +
+      geom_col(width = 0.7) +
+      coord_flip() +
+      labs(title = "Risk Contribution by Holding",
+           x = "", y = "% of Portfolio Risk") +
+      scale_y_continuous(labels = scales::percent_format()) +
+      theme_minimal(base_size = 13) +
+      theme(legend.position = "none")
+  })
+
+  # -- Diagnosis: Correlation heatmap ---------------------------------------
+
+  output$diag_corr_heatmap <- renderPlot({
+    req(portfolio$analyzed, portfolio$holding_cor)
+    cor_matrix <- portfolio$holding_cor
+    melted     <- melt(cor_matrix)
+
+    ggplot(melted, aes(x = Var1, y = Var2, fill = value)) +
+      geom_tile(color = "white") +
+      geom_text(aes(label = sprintf("%.2f", value)), color = "black", size = 3.5) +
+      scale_fill_gradient2(low = "#3498db", high = "#e74c3c", mid = "white",
+                           midpoint = 0, limit = c(-1, 1), name = "Correlation") +
+      labs(title = "Holdings Correlation Matrix") +
+      theme_minimal(base_size = 12) +
+      theme(axis.text.x  = element_text(angle = 45, vjust = 1, hjust = 1),
+            axis.title   = element_blank(),
+            panel.grid   = element_blank()) +
+      coord_fixed()
+  })
+
+  # -- Diagnosis: Sector concentration chart --------------------------------
+
+  output$diag_sector_chart <- renderPlot({
+    req(portfolio$analyzed, portfolio$sector_weights)
+    sw <- portfolio$sector_weights %>%
+      mutate(pct = weight / sum(weight))
+
+    eq_weight <- 1 / nrow(sw)
+
+    ggplot(sw, aes(x = reorder(sector, pct), y = pct, fill = sector)) +
+      geom_col(width = 0.7) +
+      geom_hline(yintercept = eq_weight, linetype = "dashed",
+                 color = "gray50", alpha = 0.7) +
+      coord_flip() +
+      labs(title = "Sector Allocation",
+           x = "", y = "Portfolio Weight",
+           caption = "Dashed line = equal sector weight") +
+      scale_y_continuous(labels = scales::percent_format()) +
+      theme_minimal(base_size = 13) +
+      theme(legend.position = "none")
+  })
+
+  # -- Diagnosis: Detailed metrics table ------------------------------------
+
+  output$diag_metrics_table <- renderTable({
     req(portfolio$analyzed, portfolio$metrics)
     m <- portfolio$metrics
 

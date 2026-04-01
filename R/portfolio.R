@@ -112,6 +112,155 @@ compute_sector_weights <- function(tickers, weights) {
     arrange(desc(weight))
 }
 
+# ── Diagnosis computation functions ───────────────────────────────────────────
+
+compute_drawdown_series <- function(portfolio_returns) {
+  r    <- portfolio_returns$portfolio_return
+  cum  <- cumprod(1 + r)
+  peak <- cummax(cum)
+  dd   <- (cum - peak) / peak
+
+  tibble(date = portfolio_returns$date, drawdown = dd)
+}
+
+compute_rolling_metrics <- function(portfolio_returns, benchmark_returns = NULL,
+                                    window = 30) {
+  r     <- portfolio_returns$portfolio_return
+  dates <- portfolio_returns$date
+  n     <- length(r)
+
+  if (n < window) return(NULL)
+
+  idx <- window:n
+  rolling_vol <- sapply(idx, function(i) {
+    sd(r[(i - window + 1):i]) * sqrt(252)
+  })
+  rolling_sharpe <- sapply(idx, function(i) {
+    chunk <- r[(i - window + 1):i]
+    m <- mean(chunk); s <- sd(chunk)
+    if (s == 0) return(NA)
+    (m * 252) / (s * sqrt(252))
+  })
+
+  result <- tibble(
+    date           = dates[idx],
+    rolling_vol    = rolling_vol,
+    rolling_sharpe = rolling_sharpe
+  )
+
+  if (!is.null(benchmark_returns)) {
+    common <- intersect(as.character(portfolio_returns$date),
+                        as.character(benchmark_returns$date))
+    b_aligned <- benchmark_returns %>%
+      filter(as.character(date) %in% common) %>% arrange(date)
+    b  <- b_aligned$portfolio_return
+    nb <- length(b)
+
+    if (nb >= window) {
+      b_idx <- window:nb
+      bench_vol <- sapply(b_idx, function(i) {
+        sd(b[(i - window + 1):i]) * sqrt(252)
+      })
+      bench_sharpe <- sapply(b_idx, function(i) {
+        chunk <- b[(i - window + 1):i]
+        m <- mean(chunk); s <- sd(chunk)
+        if (s == 0) return(NA)
+        (m * 252) / (s * sqrt(252))
+      })
+      bench_df <- tibble(
+        date                 = b_aligned$date[b_idx],
+        bench_rolling_vol    = bench_vol,
+        bench_rolling_sharpe = bench_sharpe
+      )
+      result <- result %>% left_join(bench_df, by = "date")
+    }
+  }
+
+  result
+}
+
+compute_risk_contribution <- function(price_data, weights) {
+  returns_wide <- price_data %>%
+    arrange(ticker, date) %>%
+    group_by(ticker) %>%
+    mutate(daily_return = (adjusted / dplyr::lag(adjusted)) - 1) %>%
+    filter(!is.na(daily_return)) %>%
+    select(date, ticker, daily_return) %>%
+    pivot_wider(names_from = ticker, values_from = daily_return) %>%
+    arrange(date) %>%
+    drop_na()
+
+  available <- intersect(names(weights), names(returns_wide))
+  if (length(available) < 2) return(NULL)
+
+  w <- weights[available]
+  w <- w / sum(w)
+
+  returns_matrix <- as.matrix(returns_wide[, available])
+  cov_matrix     <- cov(returns_matrix, use = "complete.obs")
+
+  port_var <- as.numeric(t(w) %*% cov_matrix %*% w)
+  port_vol <- sqrt(port_var)
+
+  marginal  <- as.numeric(cov_matrix %*% w) / port_vol
+  component <- w * marginal
+  pct_contr <- component / sum(component)
+
+  tibble(
+    ticker           = available,
+    weight           = as.numeric(w),
+    marginal_ctr     = marginal  * sqrt(252),
+    component_ctr    = component * sqrt(252),
+    pct_contribution = pct_contr
+  ) %>%
+    arrange(desc(pct_contribution))
+}
+
+compute_diversification_ratio <- function(price_data, weights) {
+  returns_wide <- price_data %>%
+    arrange(ticker, date) %>%
+    group_by(ticker) %>%
+    mutate(daily_return = (adjusted / dplyr::lag(adjusted)) - 1) %>%
+    filter(!is.na(daily_return)) %>%
+    select(date, ticker, daily_return) %>%
+    pivot_wider(names_from = ticker, values_from = daily_return) %>%
+    arrange(date) %>%
+    drop_na()
+
+  available <- intersect(names(weights), names(returns_wide))
+  if (length(available) < 2) return(NA)
+
+  w <- weights[available]
+  w <- w / sum(w)
+
+  returns_matrix  <- as.matrix(returns_wide[, available])
+  individual_vols <- apply(returns_matrix, 2, sd) * sqrt(252)
+  weighted_avg    <- sum(w * individual_vols)
+
+  cov_ann  <- cov(returns_matrix, use = "complete.obs") * 252
+  port_vol <- sqrt(as.numeric(t(w) %*% cov_ann %*% w))
+
+  if (port_vol == 0) return(NA)
+  weighted_avg / port_vol
+}
+
+compute_holding_correlations <- function(price_data) {
+  returns_wide <- price_data %>%
+    arrange(ticker, date) %>%
+    group_by(ticker) %>%
+    mutate(daily_return = (adjusted / dplyr::lag(adjusted)) - 1) %>%
+    filter(!is.na(daily_return)) %>%
+    select(date, ticker, daily_return) %>%
+    pivot_wider(names_from = ticker, values_from = daily_return) %>%
+    arrange(date) %>%
+    drop_na()
+
+  if (ncol(returns_wide) < 3) return(NULL)
+  cor(returns_wide[, -1], use = "complete.obs")
+}
+
+# ── Insight generators ────────────────────────────────────────────────────────
+
 generate_insights <- function(metrics, sector_weights) {
   insights <- character()
 
@@ -198,4 +347,46 @@ generate_insights <- function(metrics, sector_weights) {
   }
 
   insights
+}
+
+generate_diagnosis_insights <- function(metrics, sector_weights,
+                                        risk_contrib = NULL,
+                                        diversification_ratio = NULL) {
+  base <- generate_insights(metrics, sector_weights)
+  extra <- character()
+
+  if (!is.null(diversification_ratio) && !is.na(diversification_ratio)) {
+    if (diversification_ratio > 1.5) {
+      extra <- c(extra, sprintf(
+        "Diversification ratio of %.2f indicates strong diversification benefit across holdings.",
+        diversification_ratio))
+    } else if (diversification_ratio > 1.1) {
+      extra <- c(extra, sprintf(
+        "Diversification ratio of %.2f indicates moderate diversification benefit.",
+        diversification_ratio))
+    } else {
+      extra <- c(extra, sprintf(
+        "Diversification ratio of %.2f suggests limited diversification — holdings may be highly correlated.",
+        diversification_ratio))
+    }
+  }
+
+  if (!is.null(risk_contrib) && nrow(risk_contrib) > 1) {
+    top_risk <- risk_contrib %>% slice_max(pct_contribution, n = 1, with_ties = FALSE)
+    if (top_risk$pct_contribution > 0.4) {
+      extra <- c(extra, sprintf(
+        "%s contributes %.0f%% of total portfolio risk, making it the dominant risk driver.",
+        top_risk$ticker, top_risk$pct_contribution * 100))
+    }
+    if (nrow(risk_contrib) >= 2) {
+      top2 <- risk_contrib %>% slice_max(pct_contribution, n = 2, with_ties = FALSE)
+      if (sum(top2$pct_contribution) > 0.7) {
+        extra <- c(extra, sprintf(
+          "%s and %s together account for %.0f%% of portfolio risk.",
+          top2$ticker[1], top2$ticker[2], sum(top2$pct_contribution) * 100))
+      }
+    }
+  }
+
+  c(base, extra)
 }
