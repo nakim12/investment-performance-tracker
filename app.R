@@ -184,23 +184,26 @@ ui <- navbarPage(
     )
   ),
 
-  # ── Tab 3: Returns (existing) ──────────────────────────────────────────────
+  # ── Tab 4: Performance (daily + cumulative returns) ───────────────────────
 
-  tabPanel("Returns",
+  tabPanel("Performance",
     mainPanel(
-      withSpinner(plotOutput("returnsPlot"),        type = 4, color = "darkturquoise"),
+      h3("Cumulative performance"),
+      tags$p(class = "text-muted",
+        "Growth of $1 invested over the selected period (same tickers as Price Trend)."
+      ),
+      withSpinner(plotOutput("cumulativePlot", height = "400px"),
+        type = 4, color = "darkturquoise"),
       hr(),
-      withSpinner(plotOutput("returnDistribution"), type = 4, color = "darkturquoise")
-    )
-  ),
-
-  # ── Tab 4: Cumulative Returns (existing) ───────────────────────────────────
-
-  tabPanel("Cumulative Returns",
-    mainPanel(
-      withSpinner(plotOutput("cumulativePlot"), type = 4, color = "darkturquoise"),
+      h3("Daily returns"),
+      withSpinner(plotOutput("returnsPlot", height = "380px"),
+        type = 4, color = "darkturquoise"),
       hr(),
-      h4("Performance Summary"),
+      h3("Return distributions"),
+      withSpinner(plotOutput("returnDistribution", height = "400px"),
+        type = 4, color = "darkturquoise"),
+      hr(),
+      h3("Performance summary"),
       withSpinner(tableOutput("performanceSummary"), type = 4, color = "darkturquoise")
     )
   ),
@@ -238,7 +241,7 @@ ui <- navbarPage(
     )
   ),
 
-  # ── Tab 6: Risk Analysis (existing) ────────────────────────────────────────
+  # ── Tab 6: Risk Analysis ───────────────────────────────────────────────────
 
   tabPanel("Risk Analysis",
     sidebarLayout(

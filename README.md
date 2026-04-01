@@ -22,7 +22,7 @@ This project started as an RMarkdown-based analysis and evolved into a full-feat
 - **Sector Filtering**: Choose from Technology, Financial, Healthcare, Consumer, and Energy sectors.
 - **Multi-Ticker Comparison**: Select and compare multiple tickers simultaneously.
 - **Price Trend Visualization**: View adjusted prices with customizable moving averages.
-- **Daily & Cumulative Returns**: Visualize short- and long-term return patterns.
+- **Performance**: Cumulative growth, daily returns, return distributions, and a summary table in one view.
 - **Return Distribution**: Explore histograms of daily return volatility for each stock.
 - **ARIMA Forecasting**:
   - Conservative vs. Aggressive forecast modes
