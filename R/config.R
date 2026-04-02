@@ -47,3 +47,8 @@ benchmark_choices <- c(
   "Total Market (VTI)" = "VTI",
   "Dow Jones (DIA)"  = "DIA"
 )
+
+# Landing page: optional Shadertoy background (paste the iframe "src" from Shadertoy's embed dialog).
+# Example: "https://www.shadertoy.com/embed/XXXX?gui=false&t=10&muted=true&prevent_focus=true"
+# Leave empty to use the built-in CSS gradient + noise fallback.
+landing_shadertoy_embed_url <- ""

@@ -50,10 +50,18 @@ app_css <- "
 # --- UI ---
 
 ui <- navbarPage(
-  "Portfolio Intelligence Lab",
-  header = tags$head(tags$style(HTML(app_css))),
+  title = "Portfolio Intelligence Lab",
+  id    = "main_nav",
+  header = tags$head(
+    tags$style(HTML(app_css)),
+    landing_head_extras()
+  ),
 
-  # ── Tab 1: Build Portfolio ──────────────────────────────────────────────────
+  # ── Tab 1: Home (landing) ───────────────────────────────────────────────────
+
+  tabPanel("Home", landing_panel()),
+
+  # ── Tab 2: Build Portfolio ──────────────────────────────────────────────────
 
   tabPanel("Build Portfolio",
     div(class = "builder-header",
@@ -142,13 +150,13 @@ ui <- navbarPage(
     uiOutput("portfolio_results_section")
   ),
 
-  # ── Tab 2: Diagnosis ───────────────────────────────────────────────────────
+  # ── Tab 3: Diagnosis ───────────────────────────────────────────────────────
 
   tabPanel("Diagnosis",
     uiOutput("diagnosis_content")
   ),
 
-  # ── Tab 3: Price Trend (existing) ──────────────────────────────────────────
+  # ── Tab 4: Price Trend ─────────────────────────────────────────────────────
 
   tabPanel("Price Trend",
     sidebarLayout(
@@ -184,7 +192,7 @@ ui <- navbarPage(
     )
   ),
 
-  # ── Tab 4: Performance (daily + cumulative returns) ───────────────────────
+  # ── Tab 5: Performance (daily + cumulative returns) ───────────────────────
 
   tabPanel("Performance",
     mainPanel(
@@ -208,7 +216,7 @@ ui <- navbarPage(
     )
   ),
 
-  # ── Tab 5: Forecast (existing) ─────────────────────────────────────────────
+  # ── Tab 6: Forecast ─────────────────────────────────────────────────────────
 
   tabPanel("Forecast",
     sidebarLayout(
@@ -241,7 +249,7 @@ ui <- navbarPage(
     )
   ),
 
-  # ── Tab 6: Risk Analysis ───────────────────────────────────────────────────
+  # ── Tab 7: Risk Analysis ────────────────────────────────────────────────────
 
   tabPanel("Risk Analysis",
     sidebarLayout(
@@ -309,6 +317,27 @@ server <- function(input, output, session) {
     diversification   = NULL,
     holding_cor       = NULL
   )
+
+  # -- Landing page CTAs ----------------------------------------------------
+
+  observeEvent(input$landing_start, {
+    updateNavbarPage(session, inputId = "main_nav", selected = "Build Portfolio")
+  }, ignoreInit = TRUE)
+
+  observeEvent(input$landing_sample, {
+    sample_name <- names(sample_portfolios)[[1]]
+    sample      <- sample_portfolios[[sample_name]]
+    sectors     <- sapply(sample$tickers, get_sector_for_ticker)
+    portfolio$holdings <- tibble(
+      ticker = sample$tickers,
+      weight = sample$weights,
+      sector = sectors
+    )
+    portfolio$analyzed <- FALSE
+    updateSelectInput(session, "sample_portfolio", selected = sample_name)
+    updateNavbarPage(session, inputId = "main_nav", selected = "Build Portfolio")
+    showNotification(paste("Loaded sample:", sample_name), type = "message")
+  }, ignoreInit = TRUE)
 
   # -- Add holding ----------------------------------------------------------
 
