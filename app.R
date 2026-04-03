@@ -5,10 +5,10 @@ app_css <- "
 .kpi-card {
   text-align: center;
   padding: 18px 10px;
-  background: #f8f9fa;
-  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.05);
+  border-radius: 10px;
   margin-bottom: 15px;
-  border: 1px solid #e9ecef;
+  border: 1px solid rgba(255, 255, 255, 0.1);
 }
 .kpi-value {
   font-size: 22px;
@@ -17,19 +17,20 @@ app_css <- "
 }
 .kpi-label {
   font-size: 11px;
-  color: #6c757d;
+  color: #94a3b8;
   text-transform: uppercase;
   letter-spacing: 0.5px;
 }
-.kpi-positive { color: #28a745; }
-.kpi-negative { color: #dc3545; }
-.kpi-neutral  { color: #495057; }
+.kpi-positive { color: #4ade80; }
+.kpi-negative { color: #f87171; }
+.kpi-neutral  { color: #cbd5e1; }
 .insight-panel {
-  background: #f0f7ff;
-  border-left: 4px solid #007bff;
+  background: rgba(34, 211, 238, 0.08);
+  border-left: 4px solid #22d3ee;
   padding: 15px 20px;
-  border-radius: 4px;
+  border-radius: 8px;
   margin-top: 15px;
+  color: #e2e8f0;
 }
 .insight-panel li {
   margin-bottom: 8px;
@@ -41,10 +42,10 @@ app_css <- "
 .empty-state {
   text-align: center;
   padding: 60px 20px;
-  color: #999;
+  color: #64748b;
 }
-.weight-ok    { color: #28a745; font-weight: bold; }
-.weight-warn  { color: #ffc107; font-weight: bold; }
+.weight-ok    { color: #4ade80; font-weight: bold; }
+.weight-warn  { color: #fbbf24; font-weight: bold; }
 "
 
 # --- UI ---
@@ -53,7 +54,7 @@ ui <- navbarPage(
   title = "Portfolio Intelligence Lab",
   id    = "main_nav",
   header = tags$head(
-    tags$style(HTML(app_css)),
+    tags$style(HTML(paste(app_css, GLOBAL_APP_CSS, sep = "\n"))),
     landing_head_extras()
   ),
 
@@ -187,7 +188,7 @@ ui <- navbarPage(
         )
       ),
       mainPanel(
-        withSpinner(plotOutput("pricePlot"), type = 4, color = "darkturquoise")
+        withSpinner(plotOutput("pricePlot"), type = 4, color = "#22d3ee")
       )
     )
   ),
@@ -201,18 +202,18 @@ ui <- navbarPage(
         "Growth of $1 invested over the selected period (same tickers as Price Trend)."
       ),
       withSpinner(plotOutput("cumulativePlot", height = "400px"),
-        type = 4, color = "darkturquoise"),
+        type = 4, color = "#22d3ee"),
       hr(),
       h3("Daily returns"),
       withSpinner(plotOutput("returnsPlot", height = "380px"),
-        type = 4, color = "darkturquoise"),
+        type = 4, color = "#22d3ee"),
       hr(),
       h3("Return distributions"),
       withSpinner(plotOutput("returnDistribution", height = "400px"),
-        type = 4, color = "darkturquoise"),
+        type = 4, color = "#22d3ee"),
       hr(),
       h3("Performance summary"),
-      withSpinner(tableOutput("performanceSummary"), type = 4, color = "darkturquoise")
+      withSpinner(tableOutput("performanceSummary"), type = 4, color = "#22d3ee")
     )
   ),
 
@@ -238,13 +239,13 @@ ui <- navbarPage(
         textOutput("dataAvailability")
       ),
       mainPanel(
-        withSpinner(plotOutput("forecastPlot"), type = 4, color = "darkturquoise"),
+        withSpinner(plotOutput("forecastPlot"), type = 4, color = "#22d3ee"),
         br(),
         wellPanel(
           h4("Model Evaluation Metrics"),
           verbatimTextOutput("forecastMetrics")
         ),
-        withSpinner(plotOutput("forecastAccuracyPlot"), type = 4, color = "darkturquoise")
+        withSpinner(plotOutput("forecastAccuracyPlot"), type = 4, color = "#22d3ee")
       )
     )
   ),
@@ -278,15 +279,15 @@ ui <- navbarPage(
       ),
       mainPanel(
         h3("Risk Metrics Summary"),
-        withSpinner(tableOutput("riskMetricsTable"), type = 4, color = "darkturquoise"),
+        withSpinner(tableOutput("riskMetricsTable"), type = 4, color = "#22d3ee"),
         hr(),
         h3("Correlation Analysis"),
         withSpinner(plotOutput("correlationHeatmap", height = "400px"),
-          type = 4, color = "darkturquoise"),
+          type = 4, color = "#22d3ee"),
         hr(),
         h3("Risk-Return Scatter"),
         withSpinner(plotOutput("riskReturnPlot", height = "400px"),
-          type = 4, color = "darkturquoise")
+          type = 4, color = "#22d3ee")
       )
     )
   )
@@ -296,11 +297,11 @@ ui <- navbarPage(
 
 server <- function(input, output, session) {
 
-  # Landing tab: dark page shell + navbar script (body.landing-mode)
+  # Home tab: lock viewport height (no scroll past landing content)
   observe({
     v <- input$main_nav
     home <- is.null(v) || identical(v, "Home")
-    session$sendCustomMessage("setLandingBody", list(home = home))
+    session$sendCustomMessage("setHomeTab", list(home = home))
   })
 
   # ══════════════════════════════════════════════════════════════════════════
@@ -622,7 +623,7 @@ server <- function(input, output, session) {
       fluidRow(
         column(12,
           withSpinner(plotOutput("portfolio_perf_chart", height = "420px"),
-            type = 4, color = "darkturquoise")
+            type = 4, color = "#22d3ee")
         )
       ),
 
@@ -754,9 +755,9 @@ server <- function(input, output, session) {
         "Performance"),
       fluidRow(
         column(7, withSpinner(plotOutput("diag_perf_chart", height = "380px"),
-          type = 4, color = "darkturquoise")),
+          type = 4, color = "#22d3ee")),
         column(5, withSpinner(plotOutput("diag_drawdown_chart", height = "380px"),
-          type = 4, color = "darkturquoise"))
+          type = 4, color = "#22d3ee"))
       ),
 
       # ── Rolling Metrics Section ──
@@ -770,9 +771,9 @@ server <- function(input, output, session) {
       ),
       fluidRow(
         column(6, withSpinner(plotOutput("diag_rolling_vol_chart", height = "350px"),
-          type = 4, color = "darkturquoise")),
+          type = 4, color = "#22d3ee")),
         column(6, withSpinner(plotOutput("diag_rolling_sharpe_chart", height = "350px"),
-          type = 4, color = "darkturquoise"))
+          type = 4, color = "#22d3ee"))
       ),
 
       # ── Risk & Diversification Section ──
@@ -780,13 +781,13 @@ server <- function(input, output, session) {
         "Risk & Diversification"),
       fluidRow(
         column(6, withSpinner(plotOutput("diag_risk_contrib_chart", height = "380px"),
-          type = 4, color = "darkturquoise")),
+          type = 4, color = "#22d3ee")),
         column(6, withSpinner(plotOutput("diag_corr_heatmap", height = "380px"),
-          type = 4, color = "darkturquoise"))
+          type = 4, color = "#22d3ee"))
       ),
       fluidRow(
         column(6, withSpinner(plotOutput("diag_sector_chart", height = "350px"),
-          type = 4, color = "darkturquoise")),
+          type = 4, color = "#22d3ee")),
         column(6,
           wellPanel(style = "margin-top: 15px;",
             h4("Diversification Score"),
