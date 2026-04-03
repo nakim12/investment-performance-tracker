@@ -296,6 +296,13 @@ ui <- navbarPage(
 
 server <- function(input, output, session) {
 
+  # Landing tab: dark page shell + navbar script (body.landing-mode)
+  observe({
+    v <- input$main_nav
+    home <- is.null(v) || identical(v, "Home")
+    session$sendCustomMessage("setLandingBody", list(home = home))
+  })
+
   # ══════════════════════════════════════════════════════════════════════════
 
   # PORTFOLIO BUILDER
