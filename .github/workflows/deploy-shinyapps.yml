@@ -14,9 +14,17 @@
 
 name: Deploy to shinyapps.io
 
+# Speed: skip this workflow when only docs/README/etc. change (saves ~5–15+ min per push).
+# Full deploy still available anytime via Actions → Run workflow.
 on:
   push:
     branches: [main]
+    paths:
+      - "app.R"
+      - "R/**"
+      - "scripts/deploy_shinyapps.R"
+      - "DESCRIPTION"
+      - ".github/workflows/deploy-shinyapps.yml"
   workflow_dispatch:
 
 permissions:
@@ -46,6 +54,8 @@ jobs:
       - name: Install dependencies
         uses: r-lib/actions/setup-r-dependencies@v2
         with:
+          cache: true
+          upgrade: "false"
           extra-packages: |
             any::rsconnect
             any::cpp11
