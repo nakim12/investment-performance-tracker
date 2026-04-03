@@ -6,15 +6,11 @@
 
 ---
 
-## The 30-second clarity test
+## What is it?
 
-| Question | Answer |
-|----------|--------|
-| **What is it?** | A browser app where you define a **weighted portfolio**, pick a **benchmark** (e.g. SPY), and explore **diagnosis**, **performance**, **forecast**, and **risk** views on the same data window. |
-| **What decision does it support?** | “Given this mix of holdings, how does risk/return and drawdown behavior look **versus a simple passive alternative**, and where are the weak spots (concentration, correlation, tail risk)?” |
-| **What do I do first?** | Open **Build Portfolio** → enter tickers and weights (or load a **sample portfolio**) → choose a benchmark → use **Diagnosis** and **Performance** for the portfolio-level story, then drill into **Price Trend**, **Forecast**, or **Risk Analysis** as needed. |
+**Portfolio Intelligence Lab** is a Shiny app in the browser. You define a **weighted portfolio** (tickers and weights, or a **sample template**), choose a **benchmark** such as SPY or QQQ, and pull a shared history of adjusted prices from Yahoo Finance. On top of that data you get **Diagnosis** and **Performance** for portfolio-level risk, return, and drawdowns versus the benchmark, plus **Price Trend**, **Forecast** (exploratory), and **Risk Analysis** when you want more detail on individual holdings and how they move together.
 
-If that table makes sense without scrolling the rest of this file, Phase 1’s clarity bar is met.
+It is built for questions like: *How does this mix behave versus a simple passive alternative, and where are the pressure points—concentration, correlation, tail risk?* Start from **Build Portfolio**, then use **Diagnosis** and **Performance** as the main portfolio story.
 
 ---
 

@@ -46,6 +46,28 @@ app_css <- "
 }
 .weight-ok    { color: #4ade80; font-weight: bold; }
 .weight-warn  { color: #fbbf24; font-weight: bold; }
+.insight-card {
+  border-radius: 10px;
+  padding: 14px 16px;
+  margin-bottom: 12px;
+  min-height: 88px;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  font-size: 14px;
+  line-height: 1.5;
+  color: #e2e8f0;
+}
+.insight-card--neutral {
+  background: rgba(148, 163, 184, 0.12);
+  border-left: 4px solid #94a3b8;
+}
+.insight-card--ok {
+  background: rgba(74, 222, 128, 0.1);
+  border-left: 4px solid #4ade80;
+}
+.insight-card--warn {
+  background: rgba(248, 113, 113, 0.12);
+  border-left: 4px solid #f87171;
+}
 "
 
 # --- UI ---
@@ -197,9 +219,15 @@ ui <- navbarPage(
 
   tabPanel("Performance",
     mainPanel(
-      h3("Cumulative performance"),
+      uiOutput("performance_portfolio_block"),
+      hr(),
+      h3("Per-ticker exploration"),
       tags$p(class = "text-muted",
-        "Growth of $1 invested over the selected period (same tickers as Price Trend)."
+        "Uses tickers selected on the Price Trend tab (last ~1 year of Yahoo data)."
+      ),
+      h4("Cumulative performance"),
+      tags$p(class = "text-muted",
+        "Growth of $1 invested over the loaded period."
       ),
       withSpinner(plotOutput("cumulativePlot", height = "400px"),
         type = 4, color = "#22d3ee"),
@@ -309,6 +337,27 @@ server <- function(input, output, session) {
   # PORTFOLIO BUILDER
   # ══════════════════════════════════════════════════════════════════════════
 
+  # Classify insight copy for card styling (warn / ok / neutral).
+  insight_card_class <- function(text) {
+    tl <- tolower(text)
+    warn_pat <- c(
+      "underperform", "negative sharpe", "limited diversification",
+      "significant downside", "heavily concentrated", "dominant risk",
+      "diverge meaningfully", "highly correlated"
+    )
+    ok_pat <- c(
+      "outperformed", "strong risk-adjusted", "strong diversification",
+      "moderate diversification benefit"
+    )
+    if (any(vapply(warn_pat, function(p) grepl(p, tl, fixed = TRUE), logical(1)))) {
+      return("insight-card insight-card--warn")
+    }
+    if (any(vapply(ok_pat, function(p) grepl(p, tl, fixed = TRUE), logical(1)))) {
+      return("insight-card insight-card--ok")
+    }
+    "insight-card insight-card--neutral"
+  }
+
   portfolio <- reactiveValues(
     holdings          = tibble(ticker = character(), weight = numeric(), sector = character()),
     analyzed          = FALSE,
@@ -323,7 +372,8 @@ server <- function(input, output, session) {
     drawdown          = NULL,
     risk_contrib      = NULL,
     diversification   = NULL,
-    holding_cor       = NULL
+    holding_cor       = NULL,
+    return_attrib     = NULL
   )
 
   # -- Landing page CTAs ----------------------------------------------------
@@ -410,6 +460,7 @@ server <- function(input, output, session) {
     portfolio$analyzed  <- FALSE
     portfolio$returns   <- NULL
     portfolio$metrics   <- NULL
+    portfolio$return_attrib <- NULL
   })
 
   # -- Keep remove dropdown in sync -----------------------------------------
@@ -546,6 +597,7 @@ server <- function(input, output, session) {
       risk_c    <- compute_risk_contribution(price_data, weights_frac)
       div_ratio <- compute_diversification_ratio(price_data, weights_frac)
       hold_cor  <- compute_holding_correlations(price_data)
+      ret_attr  <- compute_return_attribution(price_data, weights_frac)
 
       portfolio$price_data        <- price_data
       portfolio$returns           <- port_returns
@@ -559,6 +611,7 @@ server <- function(input, output, session) {
       portfolio$risk_contrib      <- risk_c
       portfolio$diversification   <- div_ratio
       portfolio$holding_cor       <- hold_cor
+      portfolio$return_attrib     <- ret_attr
       portfolio$analyzed          <- TRUE
 
       incProgress(0.3, detail = "Done!")
@@ -700,14 +753,22 @@ server <- function(input, output, session) {
                    if (!is.na(m$sortino_ratio) && m$sortino_ratio >= 0)  "kpi-neutral"  else "kpi-negative"
     beta_val    <- if (!is.null(m$beta) && !is.na(m$beta)) sprintf("%.2f", m$beta) else "N/A"
 
-    insights <- generate_diagnosis_insights(m, sw, rc, dr)
+    insights <- generate_diagnosis_insights(m, sw, rc, dr, portfolio$holding_cor)
 
     tagList(
       div(class = "builder-header",
-        h3("Portfolio Diagnosis"),
-        tags$p(class = "text-muted",
-          sprintf("Analysis of %d holdings over the selected period against %s.",
-                  nrow(portfolio$holdings), portfolio$benchmark_name))
+        fluidRow(
+          column(8,
+            h3("Portfolio Diagnosis"),
+            tags$p(class = "text-muted",
+              sprintf("Analysis of %d holdings over the selected period against %s.",
+                      nrow(portfolio$holdings), portfolio$benchmark_name))
+          ),
+          column(4, style = "text-align: right; padding-top: 8px;",
+            downloadButton("download_diagnosis", "Download diagnosis (.txt)",
+              class = "btn-default btn-sm")
+          )
+        )
       ),
 
       # ── KPI Cards ──
@@ -742,11 +803,16 @@ server <- function(input, output, session) {
         ))
       ),
 
-      # ── Insights ──
+      # ── Insights (plain-language cards) ──
       if (length(insights) > 0) {
-        div(class = "insight-panel", style = "margin-top: 20px;",
-          h4("Portfolio Insights"),
-          tags$ul(lapply(insights, tags$li))
+        tagList(
+          h4(style = "margin-top: 20px;", "Insights"),
+          fluidRow(
+            lapply(seq_along(insights), function(k) {
+              column(4, div(class = insight_card_class(insights[k]),
+                p(style = "margin: 0;", insights[k])))
+            })
+          )
         )
       },
 
@@ -786,17 +852,21 @@ server <- function(input, output, session) {
           type = 4, color = "#22d3ee"))
       ),
       fluidRow(
-        column(6, withSpinner(plotOutput("diag_sector_chart", height = "350px"),
-          type = 4, color = "#22d3ee")),
         column(6,
-          wellPanel(style = "margin-top: 15px;",
-            h4("Diversification Score"),
-            tags$div(class = "kpi-card", style = "background: white;",
+          withSpinner(plotOutput("diag_sector_chart", height = "320px"),
+            type = 4, color = "#22d3ee"),
+          h5("Sector weights"),
+          tableOutput("diag_sector_table")
+        ),
+        column(6,
+          wellPanel(style = "margin-top: 0;",
+            h4("Diversification score"),
+            tags$div(class = "kpi-card",
               tags$div(class = paste("kpi-value",
                 if (!is.na(dr) && dr > 1.3) "kpi-positive" else
                 if (!is.na(dr) && dr > 1.0) "kpi-neutral"  else "kpi-negative"),
                 if (!is.na(dr)) sprintf("%.2f", dr) else "N/A"),
-              tags$div(class = "kpi-label", "Diversification Ratio")
+              tags$div(class = "kpi-label", "Diversification ratio")
             ),
             tags$p(class = "text-muted", style = "margin-top: 10px; font-size: 13px;",
               "Values above 1.0 indicate diversification benefit.",
@@ -805,6 +875,18 @@ server <- function(input, output, session) {
             )
           )
         )
+      ),
+
+      # ── Return attribution (linear, daily) ──
+      tags$h4(style = "border-bottom: 2px solid #eee; padding-bottom: 8px; margin-top: 30px;",
+        "Return attribution"),
+      tags$p(class = "text-muted",
+        "Each holding's share of the sum of daily portfolio returns (fixed weights).",
+        "Use with risk contribution below; names can differ when correlations matter."),
+      fluidRow(
+        column(6, tableOutput("diag_return_attrib_table")),
+        column(6, withSpinner(plotOutput("diag_return_attrib_chart", height = "320px"),
+          type = 4, color = "#22d3ee"))
       ),
 
       # ── Detailed Metrics Table ──
@@ -1013,6 +1095,237 @@ server <- function(input, output, session) {
     base
   }, striped = TRUE, hover = TRUE, align = "lr", width = "100%")
 
+  output$diag_sector_table <- renderTable({
+    req(portfolio$analyzed, portfolio$sector_weights)
+    sw <- portfolio$sector_weights
+    tot <- sum(sw$weight)
+    sw %>%
+      mutate(`Weight (%)` = sprintf("%.1f%%", weight / tot * 100)) %>%
+      select(Sector = sector, `Weight (%)`)
+  }, striped = TRUE, align = "lr", width = "100%")
+
+  output$diag_return_attrib_table <- renderTable({
+    req(portfolio$analyzed, portfolio$return_attrib)
+    portfolio$return_attrib %>%
+      transmute(
+        Ticker = ticker,
+        `Weight (%)` = sprintf("%.1f%%", weight * 100),
+        `Period return` = sprintf("%.1f%%", period_total_return * 100),
+        `Linear share` = ifelse(is.na(linear_share), "N/A",
+          sprintf("%.0f%%", linear_share * 100))
+      )
+  }, striped = TRUE, align = "lrrr", width = "100%")
+
+  output$diag_return_attrib_chart <- renderPlot({
+    req(portfolio$analyzed, portfolio$return_attrib)
+    ra <- portfolio$return_attrib %>% filter(!is.na(linear_share))
+    req(nrow(ra) > 0)
+    ggplot(ra, aes(x = reorder(ticker, linear_share), y = linear_share, fill = ticker)) +
+      geom_col(width = 0.72) +
+      coord_flip() +
+      labs(title = "Linear return attribution (share of sum of daily portfolio returns)",
+           x = "", y = "Share", fill = "") +
+      scale_y_continuous(labels = scales::percent_format()) +
+      theme_minimal(base_size = 13) +
+      theme(legend.position = "none")
+  })
+
+  output$download_diagnosis <- downloadHandler(
+    filename = function() {
+      sprintf("portfolio-diagnosis-%s.txt", Sys.Date())
+    },
+    content = function(file) {
+      req(portfolio$analyzed)
+      m   <- portfolio$metrics
+      sw  <- portfolio$sector_weights
+      rc  <- portfolio$risk_contrib
+      dr  <- portfolio$diversification
+      ins <- generate_diagnosis_insights(m, sw, rc, dr, portfolio$holding_cor)
+      lines <- c(
+        "Portfolio Intelligence Lab — Diagnosis export",
+        paste("Generated:", format(Sys.time(), usetz = TRUE)),
+        "",
+        paste("Benchmark:", portfolio$benchmark_name),
+        paste("Holdings:", paste(portfolio$holdings$ticker, collapse = ", ")),
+        "",
+        "--- Insights ---"
+      )
+      lines <- if (length(ins)) c(lines, paste0("- ", ins)) else c(lines, "(none)")
+      lines <- c(lines, "", "--- Sector weights ---")
+      if (nrow(sw) > 0) {
+        tot <- sum(sw$weight)
+        lines <- c(lines, capture.output(
+          print(sw %>% mutate(pct = sprintf("%.1f%%", weight / tot * 100)), n = 100)
+        ))
+      }
+      lines <- c(lines, "", "--- Return attribution ---")
+      if (!is.null(portfolio$return_attrib) && nrow(portfolio$return_attrib) > 0) {
+        lines <- c(lines, capture.output(print(portfolio$return_attrib, n = 100)))
+      } else {
+        lines <- c(lines, "(not available)")
+      }
+      lines <- c(lines, "", "--- Key metrics ---")
+      mt <- tibble::tibble(
+        Metric = c(
+          "Annual return", "Annual volatility", "Sharpe", "Max drawdown",
+          "Beta", "Excess return (ann.)", "Tracking error (ann.)", "Information ratio"
+        ),
+        Value = c(
+          sprintf("%.2f%%", m$annual_return * 100),
+          sprintf("%.2f%%", m$annual_volatility * 100),
+          sprintf("%.2f", m$sharpe_ratio),
+          sprintf("%.2f%%", m$max_drawdown * 100),
+          if (!is.null(m$beta) && !is.na(m$beta)) sprintf("%.2f", m$beta) else "N/A",
+          if (!is.null(m$excess_return)) sprintf("%.2f%%", m$excess_return * 100) else "N/A",
+          if (!is.null(m$tracking_error)) sprintf("%.2f%%", m$tracking_error * 100) else "N/A",
+          if (!is.null(m$information_ratio) && !is.na(m$information_ratio)) {
+            sprintf("%.2f", m$information_ratio)
+          } else "N/A"
+        )
+      )
+      lines <- c(lines, capture.output(print(mt, n = 50)))
+      lines <- c(lines, "",
+        "Educational use only — not investment advice.",
+        "Past performance does not guarantee future results.")
+      writeLines(lines, file)
+    }
+  )
+
+  # ══════════════════════════════════════════════════════════════════════════
+  # PERFORMANCE TAB — portfolio vs benchmark (Phase 2)
+  # ══════════════════════════════════════════════════════════════════════════
+
+  output$performance_portfolio_block <- renderUI({
+    if (!portfolio$analyzed) {
+      return(wellPanel(
+        tags$p(class = "text-muted",
+          "Run ", tags$b("Analyze Portfolio"), " on the ",
+          tags$b("Build Portfolio"), " tab to see cumulative return, cumulative ",
+          "excess return vs your benchmark, and a period summary for your weights ",
+          "and date range."
+        )
+      ))
+    }
+    tagList(
+      h3("Your portfolio vs benchmark"),
+      tags$p(class = "text-muted",
+        "Aligned to the analysis period and benchmark from Build Portfolio."),
+      fluidRow(
+        column(6, withSpinner(plotOutput("perf_port_cumul", height = "300px"),
+          type = 4, color = "#22d3ee")),
+        column(6, withSpinner(plotOutput("perf_port_excess", height = "300px"),
+          type = 4, color = "#22d3ee"))
+      ),
+      fluidRow(column(12,
+        h5("Period summary"),
+        tableOutput("perf_port_summary")
+      ))
+    )
+  })
+
+  output$perf_port_cumul <- renderPlot({
+    req(portfolio$analyzed, portfolio$returns)
+    port_df <- portfolio$returns %>%
+      transmute(date, cumulative_return, series = "Portfolio")
+    if (!is.null(portfolio$benchmark_returns)) {
+      bench_df <- portfolio$benchmark_returns %>%
+        transmute(date, cumulative_return, series = portfolio$benchmark_name)
+      combined <- bind_rows(port_df, bench_df)
+    } else {
+      combined <- port_df
+    }
+    ggplot(combined, aes(x = date, y = cumulative_return, color = series)) +
+      geom_line(linewidth = 1.1) +
+      geom_hline(yintercept = 0, linetype = "dotted", color = "gray50") +
+      labs(title = "Cumulative return", x = "Date", y = "Cumulative return", color = "") +
+      scale_y_continuous(labels = scales::percent_format()) +
+      scale_color_manual(values = c(
+        "Portfolio" = "#2c3e50",
+        setNames("#e74c3c", portfolio$benchmark_name)
+      )) +
+      theme_minimal(base_size = 13) +
+      theme(legend.position = "bottom")
+  })
+
+  output$perf_port_excess <- renderPlot({
+    req(portfolio$analyzed, portfolio$returns)
+    if (is.null(portfolio$benchmark_returns)) {
+      plot.new()
+      text(0.5, 0.5, "Load benchmark data from Build Portfolio\nto see cumulative excess return.")
+      return()
+    }
+    p_df <- portfolio$returns %>% select(date, r_p = portfolio_return)
+    b_df <- portfolio$benchmark_returns %>% select(date, r_b = portfolio_return)
+    joined <- inner_join(p_df, b_df, by = "date") %>%
+      arrange(date) %>%
+      mutate(
+        excess        = r_p - r_b,
+        cum_excess    = cumprod(1 + excess) - 1
+      )
+    req(nrow(joined) > 2)
+    ggplot(joined, aes(x = date, y = cum_excess)) +
+      geom_hline(yintercept = 0, linetype = "dotted", color = "gray50") +
+      geom_line(linewidth = 1.1, color = "#22d3ee") +
+      labs(
+        title = paste0("Cumulative excess return vs ", portfolio$benchmark_name),
+        x = "Date",
+        y = "Cumulative excess return"
+      ) +
+      scale_y_continuous(labels = scales::percent_format()) +
+      theme_minimal(base_size = 13)
+  })
+
+  output$perf_port_summary <- renderTable({
+    req(portfolio$analyzed, portfolio$metrics, portfolio$returns)
+    m <- portfolio$metrics
+    ptr <- portfolio$returns
+    port_tr <- dplyr::last(ptr$cumulative_return)
+    bench_tr <- NA_real_
+    bench_vol <- NA_character_
+    bench_sharpe <- NA_character_
+    if (!is.null(portfolio$benchmark_returns)) {
+      btr <- portfolio$benchmark_returns
+      bench_tr <- dplyr::last(btr$cumulative_return)
+      br <- btr$portfolio_return
+      bench_vol <- sprintf("%.1f%%", sd(br, na.rm = TRUE) * sqrt(252) * 100)
+      bs <- if (sd(br, na.rm = TRUE) > 0) {
+        mean(br, na.rm = TRUE) / sd(br, na.rm = TRUE) * sqrt(252)
+      } else NA_real_
+      bench_sharpe <- if (is.finite(bs)) sprintf("%.2f", bs) else "N/A"
+    }
+    has_bench <- !is.null(portfolio$benchmark_returns)
+    tibble(
+      Series = c("Portfolio", portfolio$benchmark_name),
+      `Period total return` = c(
+        sprintf("%.1f%%", port_tr * 100),
+        if (!has_bench || is.na(bench_tr)) "N/A" else sprintf("%.1f%%", bench_tr * 100)
+      ),
+      `Ann. volatility` = c(
+        sprintf("%.1f%%", m$annual_volatility * 100),
+        if (has_bench) bench_vol else "N/A"
+      ),
+      `Sharpe` = c(
+        sprintf("%.2f", m$sharpe_ratio),
+        if (has_bench) bench_sharpe else "N/A"
+      ),
+      `Max drawdown` = c(
+        sprintf("%.1f%%", m$max_drawdown * 100),
+        if (has_bench) "—" else "N/A"
+      ),
+      `Beta` = c(
+        if (!is.null(m$beta) && !is.na(m$beta)) sprintf("%.2f", m$beta) else "N/A",
+        if (has_bench) "1.00" else "N/A"
+      ),
+      `Excess return (ann.)` = c(
+        if (!is.null(m$excess_return)) sprintf("%.1f%%", m$excess_return * 100) else "N/A",
+        if (has_bench) "—" else "N/A"
+      ),
+      `Tracking error (ann.)` = c(
+        if (!is.null(m$tracking_error)) sprintf("%.1f%%", m$tracking_error * 100) else "N/A",
+        if (has_bench) "—" else "N/A"
+      )
+    )
+  }, align = "c", width = "100%")
 
   # ══════════════════════════════════════════════════════════════════════════
   # EXISTING TABS — Price Trend / Returns / Cumulative / Forecast / Risk

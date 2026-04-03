@@ -259,6 +259,55 @@ compute_holding_correlations <- function(price_data) {
   cor(returns_wide[, -1], use = "complete.obs")
 }
 
+# Linear attribution: each holding's sum_t(w_i * r_it) as a share of sum_t(portfolio return).
+compute_return_attribution <- function(price_data, weights) {
+  returns_wide <- price_data %>%
+    arrange(ticker, date) %>%
+    group_by(ticker) %>%
+    mutate(daily_return = (adjusted / dplyr::lag(adjusted)) - 1) %>%
+    filter(!is.na(daily_return)) %>%
+    select(date, ticker, daily_return) %>%
+    pivot_wider(names_from = ticker, values_from = daily_return) %>%
+    arrange(date) %>%
+    drop_na()
+
+  available <- intersect(names(weights), names(returns_wide))
+  if (length(available) == 0) return(NULL)
+
+  w <- weights[available]
+  w <- w / sum(w)
+
+  returns_matrix <- as.matrix(returns_wide[, available])
+  port_r         <- as.numeric(returns_matrix %*% w)
+
+  linear_contrib <- as.numeric(w * colSums(returns_matrix))
+  names(linear_contrib) <- available
+
+  total_lin <- sum(port_r)
+  if (abs(total_lin) < 1e-14) {
+    linear_share <- rep(NA_real_, length(available))
+  } else {
+    linear_share <- linear_contrib / total_lin
+  }
+
+  period_tbl <- price_data %>%
+    filter(ticker %in% available) %>%
+    group_by(ticker) %>%
+    summarise(
+      period_total_return = (dplyr::last(adjusted) / dplyr::first(adjusted)) - 1,
+      .groups = "drop"
+    )
+
+  tibble(
+    ticker              = available,
+    weight              = as.numeric(w),
+    period_total_return = period_tbl$period_total_return[match(available, period_tbl$ticker)],
+    linear_contribution = linear_contrib[available],
+    linear_share        = linear_share[available]
+  ) %>%
+    arrange(desc(abs(linear_share)))
+}
+
 # ── Insight generators ────────────────────────────────────────────────────────
 
 generate_insights <- function(metrics, sector_weights) {
@@ -349,11 +398,51 @@ generate_insights <- function(metrics, sector_weights) {
   insights
 }
 
+insight_from_correlation_matrix <- function(cor_matrix) {
+  if (is.null(cor_matrix) || !is.matrix(cor_matrix) || nrow(cor_matrix) < 2) {
+    return(character())
+  }
+  dn <- colnames(cor_matrix)
+  if (is.null(dn)) dn <- rownames(cor_matrix)
+  if (is.null(dn)) return(character())
+
+  cm <- cor_matrix
+  diag(cm) <- NA
+  cm[lower.tri(cm)] <- NA
+  mx <- max(abs(cm), na.rm = TRUE)
+  if (!is.finite(mx) || mx < 0.72) return(character())
+
+  widx <- which(abs(cm) == mx & !is.na(cm), arr.ind = TRUE)
+  if (nrow(widx) < 1) return(character())
+
+  i <- widx[1, 1]
+  j <- widx[1, 2]
+  val <- cm[i, j]
+  sprintf(
+    "%s and %s are highly correlated (%.2f), so they offer limited diversification from each other.",
+    dn[i], dn[j], val
+  )
+}
+
 generate_diagnosis_insights <- function(metrics, sector_weights,
                                         risk_contrib = NULL,
-                                        diversification_ratio = NULL) {
+                                        diversification_ratio = NULL,
+                                        holding_cor = NULL) {
   base <- generate_insights(metrics, sector_weights)
   extra <- character()
+
+  if (!is.null(metrics$tracking_error) && !is.na(metrics$tracking_error)) {
+    if (metrics$tracking_error > 0.12) {
+      extra <- c(extra, sprintf(
+        "Tracking error is %.1f%% annualized — returns diverge meaningfully from the benchmark.",
+        metrics$tracking_error * 100))
+    }
+  }
+
+  if (!is.null(holding_cor)) {
+    cor_line <- insight_from_correlation_matrix(holding_cor)
+    if (length(cor_line)) extra <- c(extra, cor_line)
+  }
 
   if (!is.null(diversification_ratio) && !is.na(diversification_ratio)) {
     if (diversification_ratio > 1.5) {
