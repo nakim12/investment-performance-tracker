@@ -54,8 +54,8 @@ jobs:
       - name: Install dependencies
         uses: r-lib/actions/setup-r-dependencies@v2
         with:
-          cache: true
-          upgrade: "false"
+          # upgrade must be a valid R expression (e.g. FALSE). YAML "false" becomes lowercase
+          # and breaks: upgrade = (false) → Error: object 'false' not found
           extra-packages: |
             any::rsconnect
             any::cpp11
