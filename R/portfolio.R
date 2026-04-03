@@ -308,6 +308,79 @@ compute_return_attribution <- function(price_data, weights) {
     arrange(desc(abs(linear_share)))
 }
 
+# Roll holding-level linear attribution into sectors (sum of linear shares per sector).
+aggregate_return_attrib_by_sector <- function(return_attrib) {
+  if (is.null(return_attrib) || nrow(return_attrib) == 0) return(NULL)
+  return_attrib %>%
+    mutate(sector = vapply(ticker, get_sector_for_ticker, character(1))) %>%
+    group_by(sector) %>%
+    summarise(
+      weight_in_portfolio    = sum(weight),
+      linear_share_sector    = sum(linear_share, na.rm = TRUE),
+      weighted_period_return = sum(weight * period_total_return, na.rm = TRUE) / sum(weight),
+      .groups = "drop"
+    ) %>%
+    arrange(desc(weight_in_portfolio))
+}
+
+# Short, decision-oriented follow-ups (not personalized advice).
+generate_action_suggestions <- function(metrics,
+                                      return_attrib = NULL,
+                                      risk_contrib    = NULL,
+                                      diversification_ratio = NULL,
+                                      holding_cor     = NULL) {
+  sug <- character()
+
+  if (!is.null(metrics$excess_return) && !is.na(metrics$excess_return) &&
+        metrics$excess_return < -0.03) {
+    sug <- c(sug,
+      "Revisit active weights: excess return vs the benchmark is meaningfully negative over this window.")
+  }
+
+  if (!is.null(return_attrib) && nrow(return_attrib) > 1 &&
+        !is.null(risk_contrib) && nrow(risk_contrib) > 1) {
+    top_r <- risk_contrib$ticker[which.max(risk_contrib$pct_contribution)]
+    ls    <- return_attrib$linear_share
+    idx   <- if (all(is.na(ls))) {
+      NA_integer_
+    } else {
+      which.max(tidyr::replace_na(abs(ls), 0))
+    }
+    top_ln <- if (length(idx) == 1L && !is.na(idx)) return_attrib$ticker[idx] else NA_character_
+    if (!is.na(top_r) && !is.na(top_ln) && !identical(top_r, top_ln)) {
+      sug <- c(sug, sprintf(
+        "Risk is most concentrated in %s, while linear return attribution leans most on %s — review sizing for both.",
+        top_r, top_ln))
+    }
+  }
+
+  if (!is.null(diversification_ratio) && !is.na(diversification_ratio) &&
+        diversification_ratio < 1.12) {
+    sug <- c(sug,
+      "Consider trimming overlapping positions or adding less-correlated holdings to improve diversification.")
+  }
+
+  if (!is.null(holding_cor)) {
+    cor_line <- insight_from_correlation_matrix(holding_cor)
+    if (length(cor_line)) {
+      sug <- c(sug,
+        "When two holdings move together, treat them as one risk bucket so you do not unintentionally double up.")
+    }
+  }
+
+  if (!is.null(metrics$max_drawdown) && !is.null(metrics$beta) &&
+        abs(metrics$max_drawdown) > 0.25 && !is.na(metrics$beta) && metrics$beta > 1.1) {
+    sug <- c(sug,
+      "Large drawdowns with beta above 1 suggest high equity sensitivity; stress-test before adding more market-like exposure.")
+  }
+
+  if (length(sug) == 0) {
+    sug <- paste(
+      "Keep monitoring benchmark-relative performance and revisit weights if your thesis or time horizon changes.")
+  }
+  unique(sug)
+}
+
 # ── Insight generators ────────────────────────────────────────────────────────
 
 generate_insights <- function(metrics, sector_weights) {
@@ -478,4 +551,50 @@ generate_diagnosis_insights <- function(metrics, sector_weights,
   }
 
   c(base, extra)
+}
+
+# Tibble for diagnosis metrics table and CSV export (formatted character values).
+build_diagnosis_metrics_tibble <- function(m) {
+  if (is.null(m) || !length(m)) {
+    return(tibble(Metric = character(), Value = character()))
+  }
+
+  base <- tibble(
+    Metric = c(
+      "Annual Return", "Annual Volatility", "Sharpe Ratio",
+      "Sortino Ratio", "Max Drawdown", "VaR (95%)", "CVaR (95%)",
+      "Best Day", "Worst Day", "Positive Days"
+    ),
+    Value  = c(
+      sprintf("%.2f%%", m$annual_return * 100),
+      sprintf("%.2f%%", m$annual_volatility * 100),
+      sprintf("%.2f",   m$sharpe_ratio),
+      if (!is.na(m$sortino_ratio)) sprintf("%.2f", m$sortino_ratio) else "N/A",
+      sprintf("%.2f%%", m$max_drawdown * 100),
+      sprintf("%.2f%%", m$var_95 * 100),
+      sprintf("%.2f%%", m$cvar_95 * 100),
+      sprintf("%.2f%%", m$best_day * 100),
+      sprintf("%.2f%%", m$worst_day * 100),
+      sprintf("%.1f%%", m$positive_days * 100)
+    )
+  )
+
+  if (!is.null(m$beta)) {
+    bench <- tibble(
+      Metric = c(
+        "Beta", "Alpha", "Excess Return", "Tracking Error",
+        "Information Ratio"
+      ),
+      Value  = c(
+        sprintf("%.2f", m$beta),
+        sprintf("%.2f%%", m$alpha * 100),
+        sprintf("%.2f%%", m$excess_return * 100),
+        sprintf("%.2f%%", m$tracking_error * 100),
+        if (!is.na(m$information_ratio)) sprintf("%.2f", m$information_ratio) else "N/A"
+      )
+    )
+    base <- bind_rows(base, bench)
+  }
+
+  base
 }

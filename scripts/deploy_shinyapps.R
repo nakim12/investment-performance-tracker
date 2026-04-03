@@ -31,7 +31,11 @@ r_files <- if (dir.exists("R")) {
 } else {
   character()
 }
-app_files <- c("app.R", sort(r_files))
+app_files <- c(
+  "app.R",
+  if (file.exists("global.R")) "global.R",
+  sort(r_files)
+)
 
 rsconnect::deployApp(
   appDir        = ".",

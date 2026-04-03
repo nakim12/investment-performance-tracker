@@ -68,6 +68,11 @@ app_css <- "
   background: rgba(248, 113, 113, 0.12);
   border-left: 4px solid #f87171;
 }
+.insight-card--action {
+  background: rgba(34, 211, 238, 0.1);
+  border-left: 4px solid #22d3ee;
+}
+.diagnosis-downloads .btn { margin-left: 6px; margin-bottom: 6px; }
 "
 
 # --- UI ---
@@ -318,7 +323,11 @@ ui <- navbarPage(
           type = 4, color = "#22d3ee")
       )
     )
-  )
+  ),
+
+  # ── Tab 8: Methodology ─────────────────────────────────────────────────────
+
+  tabPanel("Methodology", methodology_panel())
 )
 
 # --- Server ---
@@ -373,7 +382,8 @@ server <- function(input, output, session) {
     risk_contrib      = NULL,
     diversification   = NULL,
     holding_cor       = NULL,
-    return_attrib     = NULL
+    return_attrib     = NULL,
+    sector_return_attrib = NULL
   )
 
   # -- Landing page CTAs ----------------------------------------------------
@@ -461,6 +471,7 @@ server <- function(input, output, session) {
     portfolio$returns   <- NULL
     portfolio$metrics   <- NULL
     portfolio$return_attrib <- NULL
+    portfolio$sector_return_attrib <- NULL
   })
 
   # -- Keep remove dropdown in sync -----------------------------------------
@@ -598,6 +609,7 @@ server <- function(input, output, session) {
       div_ratio <- compute_diversification_ratio(price_data, weights_frac)
       hold_cor  <- compute_holding_correlations(price_data)
       ret_attr  <- compute_return_attribution(price_data, weights_frac)
+      sec_attr  <- if (!is.null(ret_attr)) aggregate_return_attrib_by_sector(ret_attr) else NULL
 
       portfolio$price_data        <- price_data
       portfolio$returns           <- port_returns
@@ -612,6 +624,7 @@ server <- function(input, output, session) {
       portfolio$diversification   <- div_ratio
       portfolio$holding_cor       <- hold_cor
       portfolio$return_attrib     <- ret_attr
+      portfolio$sector_return_attrib <- sec_attr
       portfolio$analyzed          <- TRUE
 
       incProgress(0.3, detail = "Done!")
@@ -754,19 +767,29 @@ server <- function(input, output, session) {
     beta_val    <- if (!is.null(m$beta) && !is.na(m$beta)) sprintf("%.2f", m$beta) else "N/A"
 
     insights <- generate_diagnosis_insights(m, sw, rc, dr, portfolio$holding_cor)
+    actions  <- generate_action_suggestions(
+      m, portfolio$return_attrib, rc, dr, portfolio$holding_cor)
 
     tagList(
       div(class = "builder-header",
         fluidRow(
-          column(8,
+          column(6,
             h3("Portfolio Diagnosis"),
             tags$p(class = "text-muted",
               sprintf("Analysis of %d holdings over the selected period against %s.",
                       nrow(portfolio$holdings), portfolio$benchmark_name))
           ),
-          column(4, style = "text-align: right; padding-top: 8px;",
-            downloadButton("download_diagnosis", "Download diagnosis (.txt)",
-              class = "btn-default btn-sm")
+          column(6,
+            div(class = "diagnosis-downloads", style = "text-align: right; padding-top: 4px;",
+              downloadButton("download_diagnosis", "Diagnosis (.txt)",
+                class = "btn-default btn-sm"),
+              downloadButton("download_metrics_csv", "Metrics (.csv)",
+                class = "btn-default btn-sm"),
+              downloadButton("download_holding_attrib_csv", "Holding attribution (.csv)",
+                class = "btn-default btn-sm"),
+              downloadButton("download_sector_attrib_csv", "Sector attribution (.csv)",
+                class = "btn-default btn-sm")
+            )
           )
         )
       ),
@@ -811,6 +834,21 @@ server <- function(input, output, session) {
             lapply(seq_along(insights), function(k) {
               column(4, div(class = insight_card_class(insights[k]),
                 p(style = "margin: 0;", insights[k])))
+            })
+          )
+        )
+      },
+
+      # ── What to consider next (Phase 2) ──
+      if (length(actions) > 0) {
+        tagList(
+          h4(style = "margin-top: 24px;", "What to consider next"),
+          tags$p(class = "text-muted", style = "font-size: 13px;",
+            "Ideas to stress-test your allocation — not recommendations."),
+          fluidRow(
+            lapply(seq_along(actions), function(k) {
+              column(4, div(class = "insight-card insight-card--action",
+                p(style = "margin: 0;", actions[k])))
             })
           )
         )
@@ -886,6 +924,18 @@ server <- function(input, output, session) {
       fluidRow(
         column(6, tableOutput("diag_return_attrib_table")),
         column(6, withSpinner(plotOutput("diag_return_attrib_chart", height = "320px"),
+          type = 4, color = "#22d3ee"))
+      ),
+
+      # ── Sector return attribution ──
+      tags$h4(style = "border-bottom: 2px solid #eee; padding-bottom: 8px; margin-top: 30px;",
+        "Sector return attribution"),
+      tags$p(class = "text-muted",
+        "Sector weights sum holdings; linear share sums each holding’s linear attribution within the sector. ",
+        "Weighted period return is a weight blend of holding period returns inside that sector."),
+      fluidRow(
+        column(6, tableOutput("diag_sector_return_table")),
+        column(6, withSpinner(plotOutput("diag_sector_return_chart", height = "320px"),
           type = 4, color = "#22d3ee"))
       ),
 
@@ -1057,42 +1107,7 @@ server <- function(input, output, session) {
 
   output$diag_metrics_table <- renderTable({
     req(portfolio$analyzed, portfolio$metrics)
-    m <- portfolio$metrics
-
-    base <- tibble(
-      Metric = c("Annual Return", "Annual Volatility", "Sharpe Ratio",
-                  "Sortino Ratio", "Max Drawdown", "VaR (95%)", "CVaR (95%)",
-                  "Best Day", "Worst Day", "Positive Days"),
-      Value  = c(
-        sprintf("%.2f%%", m$annual_return * 100),
-        sprintf("%.2f%%", m$annual_volatility * 100),
-        sprintf("%.2f",   m$sharpe_ratio),
-        if (!is.na(m$sortino_ratio)) sprintf("%.2f", m$sortino_ratio) else "N/A",
-        sprintf("%.2f%%", m$max_drawdown * 100),
-        sprintf("%.2f%%", m$var_95 * 100),
-        sprintf("%.2f%%", m$cvar_95 * 100),
-        sprintf("%.2f%%", m$best_day * 100),
-        sprintf("%.2f%%", m$worst_day * 100),
-        sprintf("%.1f%%", m$positive_days * 100)
-      )
-    )
-
-    if (!is.null(m$beta)) {
-      bench <- tibble(
-        Metric = c("Beta", "Alpha", "Excess Return", "Tracking Error",
-                    "Information Ratio"),
-        Value  = c(
-          sprintf("%.2f", m$beta),
-          sprintf("%.2f%%", m$alpha * 100),
-          sprintf("%.2f%%", m$excess_return * 100),
-          sprintf("%.2f%%", m$tracking_error * 100),
-          if (!is.na(m$information_ratio)) sprintf("%.2f", m$information_ratio) else "N/A"
-        )
-      )
-      base <- bind_rows(base, bench)
-    }
-
-    base
+    build_diagnosis_metrics_tibble(portfolio$metrics)
   }, striped = TRUE, hover = TRUE, align = "lr", width = "100%")
 
   output$diag_sector_table <- renderTable({
@@ -1130,6 +1145,55 @@ server <- function(input, output, session) {
       theme(legend.position = "none")
   })
 
+  output$diag_sector_return_table <- renderTable({
+    if (!portfolio$analyzed) return(NULL)
+    sr <- portfolio$sector_return_attrib
+    if (is.null(sr) || nrow(sr) == 0) {
+      return(data.frame(Note = "No sector attribution for this run.", check.names = FALSE))
+    }
+    tot_w <- sum(sr$weight_in_portfolio)
+    sr %>%
+      transmute(
+        Sector = sector,
+        `Weight (%)` = sprintf("%.1f%%", weight_in_portfolio / tot_w * 100),
+        `Linear share` = ifelse(is.na(linear_share_sector), "N/A",
+          sprintf("%.0f%%", linear_share_sector * 100)),
+        `Weighted period return` = sprintf("%.1f%%", weighted_period_return * 100)
+      )
+  }, striped = TRUE, align = "lrrr", width = "100%")
+
+  output$diag_sector_return_chart <- renderPlot({
+    if (!portfolio$analyzed) return(invisible(NULL))
+    sr <- portfolio$sector_return_attrib
+    if (is.null(sr) || nrow(sr) == 0) {
+      plot.new()
+      text(0.5, 0.5, "No sector attribution for this run.")
+      return()
+    }
+    if (all(is.na(sr$linear_share_sector))) {
+      plot_df <- sr %>%
+        mutate(
+          plot_y = weight_in_portfolio / sum(weight_in_portfolio),
+          metric = "Portfolio weight share"
+        )
+      sub <- "Portfolio weight share (linear share unavailable)"
+    } else {
+      plot_df <- sr %>%
+        mutate(
+          plot_y = linear_share_sector,
+          metric = "Linear return share"
+        )
+      sub <- "Sum of holding linear shares within each sector"
+    }
+    ggplot(plot_df, aes(x = reorder(sector, plot_y), y = plot_y, fill = sector)) +
+      geom_col(width = 0.72) +
+      coord_flip() +
+      labs(title = "Sector attribution", subtitle = sub, x = "", y = "") +
+      scale_y_continuous(labels = scales::percent_format()) +
+      theme_minimal(base_size = 13) +
+      theme(legend.position = "none")
+  })
+
   output$download_diagnosis <- downloadHandler(
     filename = function() {
       sprintf("portfolio-diagnosis-%s.txt", Sys.Date())
@@ -1141,6 +1205,8 @@ server <- function(input, output, session) {
       rc  <- portfolio$risk_contrib
       dr  <- portfolio$diversification
       ins <- generate_diagnosis_insights(m, sw, rc, dr, portfolio$holding_cor)
+      act <- generate_action_suggestions(
+        m, portfolio$return_attrib, rc, dr, portfolio$holding_cor)
       lines <- c(
         "Portfolio Intelligence Lab — Diagnosis export",
         paste("Generated:", format(Sys.time(), usetz = TRUE)),
@@ -1151,6 +1217,8 @@ server <- function(input, output, session) {
         "--- Insights ---"
       )
       lines <- if (length(ins)) c(lines, paste0("- ", ins)) else c(lines, "(none)")
+      lines <- c(lines, "", "--- What to consider next ---")
+      lines <- if (length(act)) c(lines, paste0("- ", act)) else c(lines, "(none)")
       lines <- c(lines, "", "--- Sector weights ---")
       if (nrow(sw) > 0) {
         tot <- sum(sw$weight)
@@ -1158,36 +1226,70 @@ server <- function(input, output, session) {
           print(sw %>% mutate(pct = sprintf("%.1f%%", weight / tot * 100)), n = 100)
         ))
       }
-      lines <- c(lines, "", "--- Return attribution ---")
+      lines <- c(lines, "", "--- Return attribution (holdings) ---")
       if (!is.null(portfolio$return_attrib) && nrow(portfolio$return_attrib) > 0) {
         lines <- c(lines, capture.output(print(portfolio$return_attrib, n = 100)))
       } else {
         lines <- c(lines, "(not available)")
       }
+      lines <- c(lines, "", "--- Sector return attribution ---")
+      if (!is.null(portfolio$sector_return_attrib) && nrow(portfolio$sector_return_attrib) > 0) {
+        lines <- c(lines, capture.output(print(portfolio$sector_return_attrib, n = 100)))
+      } else {
+        lines <- c(lines, "(not available)")
+      }
       lines <- c(lines, "", "--- Key metrics ---")
-      mt <- tibble::tibble(
-        Metric = c(
-          "Annual return", "Annual volatility", "Sharpe", "Max drawdown",
-          "Beta", "Excess return (ann.)", "Tracking error (ann.)", "Information ratio"
-        ),
-        Value = c(
-          sprintf("%.2f%%", m$annual_return * 100),
-          sprintf("%.2f%%", m$annual_volatility * 100),
-          sprintf("%.2f", m$sharpe_ratio),
-          sprintf("%.2f%%", m$max_drawdown * 100),
-          if (!is.null(m$beta) && !is.na(m$beta)) sprintf("%.2f", m$beta) else "N/A",
-          if (!is.null(m$excess_return)) sprintf("%.2f%%", m$excess_return * 100) else "N/A",
-          if (!is.null(m$tracking_error)) sprintf("%.2f%%", m$tracking_error * 100) else "N/A",
-          if (!is.null(m$information_ratio) && !is.na(m$information_ratio)) {
-            sprintf("%.2f", m$information_ratio)
-          } else "N/A"
-        )
-      )
-      lines <- c(lines, capture.output(print(mt, n = 50)))
+      lines <- c(lines, capture.output(print(build_diagnosis_metrics_tibble(m), n = 100)))
       lines <- c(lines, "",
         "Educational use only — not investment advice.",
         "Past performance does not guarantee future results.")
       writeLines(lines, file)
+    }
+  )
+
+  output$download_metrics_csv <- downloadHandler(
+    filename = function() sprintf("portfolio-metrics-%s.csv", Sys.Date()),
+    content = function(file) {
+      req(portfolio$analyzed, portfolio$metrics)
+      utils::write.csv(
+        build_diagnosis_metrics_tibble(portfolio$metrics),
+        file,
+        row.names = FALSE
+      )
+    }
+  )
+
+  output$download_holding_attrib_csv <- downloadHandler(
+    filename = function() sprintf("holding-attribution-%s.csv", Sys.Date()),
+    content = function(file) {
+      req(portfolio$analyzed)
+      ra <- portfolio$return_attrib
+      if (is.null(ra) || nrow(ra) == 0) {
+        utils::write.csv(
+          data.frame(note = "No holding attribution for this run."),
+          file,
+          row.names = FALSE
+        )
+      } else {
+        utils::write.csv(ra, file, row.names = FALSE)
+      }
+    }
+  )
+
+  output$download_sector_attrib_csv <- downloadHandler(
+    filename = function() sprintf("sector-attribution-%s.csv", Sys.Date()),
+    content = function(file) {
+      req(portfolio$analyzed)
+      sr <- portfolio$sector_return_attrib
+      if (is.null(sr) || nrow(sr) == 0) {
+        utils::write.csv(
+          data.frame(note = "No sector attribution for this run."),
+          file,
+          row.names = FALSE
+        )
+      } else {
+        utils::write.csv(sr, file, row.names = FALSE)
+      }
     }
   )
 
