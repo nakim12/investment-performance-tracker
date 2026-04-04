@@ -61,8 +61,6 @@ jobs:
           # and breaks: upgrade = (false) → Error: object 'false' not found
           extra-packages: |
             any::rsconnect
-            any::cpp11
-            any::RcppArmadillo
 
       - name: Deploy
         run: Rscript scripts/deploy_shinyapps.R

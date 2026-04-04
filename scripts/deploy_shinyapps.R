@@ -24,9 +24,22 @@ rsconnect::setAccountInfo(
   secret = secret
 )
 
-# Manifest must use full https CRAN URLs so shinyapps.io can fetch sources when
-# it rebuilds the image (RSPM shorthand from PPM-based installs breaks there).
-options(repos = c(CRAN = "https://cloud.r-project.org"))
+# shinyapps.io downloads package *sources* from URLs in the bundle manifest.
+# - Named repos c(CRAN = "https://...") can still serialize as scheme "CRAN/..." on server.
+# - Linux/binary installs sometimes record Version like "15.2.4-1" but CRAN tarballs are
+#   "15.2.4", so fetches 404 / wrong path.
+cran_root <- "https://cloud.r-project.org"
+options(repos = cran_root)
+
+if (nzchar(Sys.getenv("CI", ""))) {
+  message("CI: reinstalling Rcpp stack from CRAN source for rsconnect/shinyapps manifest...")
+  utils::install.packages(
+    c("Rcpp", "cpp11", "RcppArmadillo"),
+    repos = cran_root,
+    type  = "source",
+    quiet = TRUE
+  )
+}
 
 # Only bundle the Shiny app. If the whole repo is bundled, rsconnect's renv
 # snapshot pulls in knitr/rmarkdown/tseries from the Rmd and fails CI.

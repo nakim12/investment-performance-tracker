@@ -36,7 +36,7 @@ Or use **Actions → Deploy to shinyapps.io → Run workflow** after secrets are
 - **Compile from source:** If a binary isn’t available for the runner’s Linux + R version, some packages compile from source, which adds time.
 - **Deploy step:** `rsconnect` bundles the app and uploads it to Posit’s servers; that step is mostly network + their processing.
 
-**What we already do:** Ubuntu, dependency caching in `setup-r-dependencies`, and **CRAN (`cloud.r-project.org`)** for the deploy job—not Posit Package Manager in that workflow. Using RSPM/PPM on the Actions runner can make `rsconnect` write a manifest with a `RSPM` repository shorthand; **shinyapps.io** then fails to fetch packages (`Unsupported url scheme: RSPM/...`). `scripts/deploy_shinyapps.R` also sets `options(repos = ...)` before `deployApp()` so the bundle lists full `https://` URLs.
+**What we already do:** Ubuntu, dependency caching in `setup-r-dependencies`, and **CRAN (`cloud.r-project.org`)** for the deploy job (no RSPM—avoids `RSPM/...` URL scheme errors on shinyapps.io). Before `deployApp()`, `scripts/deploy_shinyapps.R` sets `options(repos = "https://cloud.r-project.org")` (unnamed URL, not `CRAN = ...`, to reduce `CRAN/src/contrib/...` scheme errors) and, on **CI**, reinstalls **Rcpp**, **cpp11**, and **RcppArmadillo** from **source** so package versions match CRAN tarball names (Linux binaries sometimes show `x.y.z-1`, which breaks server-side source fetch).
 
 **Workflow tweak:** Deploy runs on `push` to `main` only when `app.R`, `R/`, `scripts/deploy_shinyapps.R`, `DESCRIPTION`, or the deploy workflow itself changes—so README-only pushes don’t trigger a full deploy.
 
