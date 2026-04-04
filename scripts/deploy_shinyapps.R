@@ -24,6 +24,10 @@ rsconnect::setAccountInfo(
   secret = secret
 )
 
+# Manifest must use full https CRAN URLs so shinyapps.io can fetch sources when
+# it rebuilds the image (RSPM shorthand from PPM-based installs breaks there).
+options(repos = c(CRAN = "https://cloud.r-project.org"))
+
 # Only bundle the Shiny app. If the whole repo is bundled, rsconnect's renv
 # snapshot pulls in knitr/rmarkdown/tseries from the Rmd and fails CI.
 r_files <- if (dir.exists("R")) {

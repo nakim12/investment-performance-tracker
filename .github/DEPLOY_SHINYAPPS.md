@@ -36,7 +36,7 @@ Or use **Actions → Deploy to shinyapps.io → Run workflow** after secrets are
 - **Compile from source:** If a binary isn’t available for the runner’s Linux + R version, some packages compile from source, which adds time.
 - **Deploy step:** `rsconnect` bundles the app and uploads it to Posit’s servers; that step is mostly network + their processing.
 
-**What we already do:** Ubuntu + [Posit Public Package Manager](https://packagemanager.posit.co/) (via `use-public-rspm: true`) for pre-built binaries when available, and dependency caching in `setup-r-dependencies`.
+**What we already do:** Ubuntu, dependency caching in `setup-r-dependencies`, and **CRAN (`cloud.r-project.org`)** for the deploy job—not Posit Package Manager in that workflow. Using RSPM/PPM on the Actions runner can make `rsconnect` write a manifest with a `RSPM` repository shorthand; **shinyapps.io** then fails to fetch packages (`Unsupported url scheme: RSPM/...`). `scripts/deploy_shinyapps.R` also sets `options(repos = ...)` before `deployApp()` so the bundle lists full `https://` URLs.
 
 **Workflow tweak:** Deploy runs on `push` to `main` only when `app.R`, `R/`, `scripts/deploy_shinyapps.R`, `DESCRIPTION`, or the deploy workflow itself changes—so README-only pushes don’t trigger a full deploy.
 
