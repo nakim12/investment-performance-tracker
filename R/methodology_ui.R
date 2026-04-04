@@ -77,6 +77,17 @@ methodology_panel <- function() {
     ),
 
     wellPanel(
+      h4("Scenarios & stress"),
+      tags$ul(
+        tags$li(tags$b("Historical episodes:"), " slice your portfolio (and benchmark) to a calendar window and rebase cumulative return to the first day in that window. ",
+                "Summary stats are descriptive only."),
+        tags$li(tags$b("Additive daily shock:"), " the same fixed ", tags$b("basis-point"), " amount is added to each selected holding’s ",
+                "daily simple return on every day in your analysis sample; the portfolio is recomputed with fixed weights. ",
+                "This is a mechanical sensitivity tool, not a model of how markets behave under stress.")
+      )
+    ),
+
+    wellPanel(
       h4("Disclaimer"),
       tags$p(style = "font-weight: 500;",
         "Educational software only — not investment, tax, or legal advice. ",

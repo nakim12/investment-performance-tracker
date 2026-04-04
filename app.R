@@ -250,7 +250,58 @@ ui <- navbarPage(
     )
   ),
 
-  # ── Tab 6: Forecast ─────────────────────────────────────────────────────────
+  # ── Tab 6: Scenarios & stress ───────────────────────────────────────────────
+
+  tabPanel("Scenarios",
+    sidebarLayout(
+      sidebarPanel(
+        width = 3,
+        h4("Historical episode"),
+        selectInput("stress_preset", "Preset or custom",
+          choices  = stress_preset_choices(),
+          selected = "custom"),
+        dateRangeInput("stress_custom_range", "Date range",
+          start = Sys.Date() - 365, end = Sys.Date(), max = Sys.Date()),
+        helpText("Choosing a preset fills these dates; you can edit them anytime."),
+        hr(),
+        h4("Additive stress (full sample)"),
+        radioButtons("stress_scope", "Apply extra daily return to",
+          choices = c("All holdings" = "all", "One sector" = "sector"),
+          selected = "all"),
+        conditionalPanel(
+          condition = "input.stress_scope == 'sector'",
+          selectInput("stress_sector_pick", "Sector",
+            choices = names(stock_sectors), selected = names(stock_sectors)[[1]])
+        ),
+        sliderInput("stress_bps", "Extra daily return (basis points, every day)",
+          min = -100, max = 100, value = 0, step = 5),
+        helpText("Mechanical sensitivity only: same bps added to each affected holding’s daily return, then the portfolio is recomputed. ",
+                 "0 bps = baseline path."),
+        hr(),
+        tags$p(class = "text-muted", style = "font-size: 12px;",
+          "Run ", tags$b("Analyze Portfolio"), " on ",
+          tags$b("Build Portfolio"), " first."
+        )
+      ),
+      mainPanel(
+        width = 9,
+        h3("Historical episode (rebased to window start)"),
+        withSpinner(plotOutput("stress_hist_plot", height = "300px"),
+          type = 4, color = "#22d3ee"),
+        tableOutput("stress_hist_table"),
+        hr(),
+        h3("Stressed vs baseline (full analysis period)"),
+        withSpinner(plotOutput("stress_shock_plot", height = "340px"),
+          type = 4, color = "#22d3ee"),
+        tags$p(class = "text-muted",
+          "Baseline uses your analyzed portfolio as computed on the ",
+          tags$b("Diagnosis"), " tab. Stressed path applies the bps adjustment only to the scope you selected."
+        )
+      )
+    )
+  ),
+
+  # ── Tab 7: Forecast ─────────────────────────────────────────────────────────
 
   tabPanel("Forecast",
     sidebarLayout(
@@ -283,7 +334,7 @@ ui <- navbarPage(
     )
   ),
 
-  # ── Tab 7: Risk Analysis ────────────────────────────────────────────────────
+  # ── Tab 8: Risk Analysis ────────────────────────────────────────────────────
 
   tabPanel("Risk Analysis",
     sidebarLayout(
@@ -325,7 +376,7 @@ ui <- navbarPage(
     )
   ),
 
-  # ── Tab 8: Methodology ─────────────────────────────────────────────────────
+  # ── Tab 9: Methodology ─────────────────────────────────────────────────────
 
   tabPanel("Methodology", methodology_panel())
 )
@@ -405,6 +456,14 @@ server <- function(input, output, session) {
     updateSelectInput(session, "sample_portfolio", selected = sample_name)
     updateNavbarPage(session, inputId = "main_nav", selected = "Build Portfolio")
     showNotification(paste("Loaded sample:", sample_name), type = "message")
+  }, ignoreInit = TRUE)
+
+  observeEvent(input$landing_methodology, {
+    updateNavbarPage(session, inputId = "main_nav", selected = "Methodology")
+  }, ignoreInit = TRUE)
+
+  observeEvent(input$landing_scenarios, {
+    updateNavbarPage(session, inputId = "main_nav", selected = "Scenarios")
   }, ignoreInit = TRUE)
 
   # -- Add holding ----------------------------------------------------------
@@ -1428,6 +1487,185 @@ server <- function(input, output, session) {
       )
     )
   }, align = "c", width = "100%")
+
+  # ══════════════════════════════════════════════════════════════════════════
+  # SCENARIOS TAB
+  # ══════════════════════════════════════════════════════════════════════════
+
+  observeEvent(input$stress_preset, {
+    req(input$stress_preset)
+    if (input$stress_preset != "custom") {
+      p <- stress_presets[[input$stress_preset]]
+      if (!is.null(p)) {
+        updateDateRangeInput(session, "stress_custom_range",
+          start = p$start, end = p$end)
+      }
+    }
+  }, ignoreInit = TRUE)
+
+  observe({
+    hp <- portfolio$holdings$ticker
+    if (length(hp) == 0) return()
+    secs <- names(stock_sectors)[vapply(names(stock_sectors), function(s) {
+      any(hp %in% stock_sectors[[s]])
+    }, logical(1))]
+    if (length(secs) == 0) return()
+    cur <- input$stress_sector_pick
+    sel <- if (!is.null(cur) && cur %in% secs) cur else secs[[1]]
+    updateSelectInput(session, "stress_sector_pick", choices = secs, selected = sel)
+  })
+
+  stress_window_dates <- reactive({
+    req(input$stress_custom_range)
+    list(start = input$stress_custom_range[1], end = input$stress_custom_range[2])
+  })
+
+  output$stress_hist_plot <- renderPlot({
+    req(portfolio$analyzed, portfolio$returns)
+    dates <- stress_window_dates()
+    ps <- slice_returns_by_date(portfolio$returns, dates$start, dates$end)
+    validate(need(!is.null(ps) && nrow(ps) >= 2,
+      "No overlapping portfolio data in this date range. Widen the range or re-analyze."))
+
+    p_re <- rebase_cumulative_from_slice(ps)
+    if (is.null(p_re) || nrow(p_re) < 2) {
+      plot.new()
+      text(0.5, 0.5, "Insufficient data in window.")
+      return()
+    }
+
+    if (!is.null(portfolio$benchmark_returns)) {
+      bs <- slice_returns_by_date(portfolio$benchmark_returns, dates$start, dates$end)
+      if (!is.null(bs) && nrow(bs) >= 2) {
+        b_re <- rebase_cumulative_from_slice(bs)
+        if (!is.null(b_re) && nrow(b_re) >= 2) {
+          combined <- bind_rows(
+            p_re %>% transmute(date, cumulative_return, series = "Portfolio"),
+            b_re %>% transmute(date, cumulative_return, series = portfolio$benchmark_name)
+          )
+          return(
+            ggplot(combined, aes(x = date, y = cumulative_return, color = series)) +
+              geom_line(linewidth = 1.05) +
+              geom_hline(yintercept = 0, linetype = "dotted", color = "gray50") +
+              labs(title = "Cumulative return in window (rebased)", x = "Date", y = "", color = "") +
+              scale_y_continuous(labels = scales::percent_format()) +
+              scale_color_manual(values = c(
+                "Portfolio" = "#2c3e50",
+                setNames("#e74c3c", portfolio$benchmark_name)
+              )) +
+              theme_minimal(base_size = 13) +
+              theme(legend.position = "bottom")
+          )
+        }
+      }
+    }
+
+    ggplot(p_re, aes(x = date, y = cumulative_return)) +
+      geom_line(linewidth = 1.05, color = "#2c3e50") +
+      geom_hline(yintercept = 0, linetype = "dotted", color = "gray50") +
+      labs(title = "Cumulative return in window (rebased, portfolio only)",
+           x = "Date", y = "Cumulative return") +
+      scale_y_continuous(labels = scales::percent_format()) +
+      theme_minimal(base_size = 13)
+  })
+
+  output$stress_hist_table <- renderTable({
+    req(portfolio$analyzed, portfolio$returns)
+    dates <- stress_window_dates()
+    ps <- slice_returns_by_date(portfolio$returns, dates$start, dates$end)
+    validate(need(!is.null(ps) && nrow(ps) >= 2, "Adjust the date range."))
+
+    sm_p <- summarize_return_slice(ps)
+    sm_b <- NULL
+    if (!is.null(portfolio$benchmark_returns)) {
+      bs <- slice_returns_by_date(portfolio$benchmark_returns, dates$start, dates$end)
+      if (!is.null(bs) && nrow(bs) >= 2) sm_b <- summarize_return_slice(bs)
+    }
+
+    fmt_pct <- function(x) if (is.null(x)) "N/A" else sprintf("%.2f%%", x * 100)
+    fmt_pct2 <- function(x) if (is.null(x)) "N/A" else sprintf("%.2f%%", x * 100)
+
+    tibble(
+      Metric = c(
+        "Trading days", "Total return", "Ann. volatility", "Max drawdown",
+        "Worst day", "Best day"
+      ),
+      Portfolio = c(
+        as.character(sm_p$n_days),
+        fmt_pct(sm_p$total_return),
+        fmt_pct2(sm_p$ann_vol),
+        fmt_pct(sm_p$max_dd),
+        fmt_pct2(sm_p$worst_day),
+        fmt_pct2(sm_p$best_day)
+      ),
+      Benchmark = c(
+        if (!is.null(sm_b)) as.character(sm_b$n_days) else "N/A",
+        if (!is.null(sm_b)) fmt_pct(sm_b$total_return) else "N/A",
+        if (!is.null(sm_b)) fmt_pct2(sm_b$ann_vol) else "N/A",
+        if (!is.null(sm_b)) fmt_pct(sm_b$max_dd) else "N/A",
+        if (!is.null(sm_b)) fmt_pct2(sm_b$worst_day) else "N/A",
+        if (!is.null(sm_b)) fmt_pct2(sm_b$best_day) else "N/A"
+      )
+    )
+  }, striped = TRUE, align = "lrr", width = "100%")
+
+  output$stress_shock_plot <- renderPlot({
+    req(portfolio$analyzed, portfolio$price_data, portfolio$weights_frac)
+    rw <- returns_wide_from_price_data(portfolio$price_data)
+    w  <- portfolio$weights_frac
+    base <- portfolio_returns_from_wide(rw, w)
+    validate(need(!is.null(base) && nrow(base) >= 3, "Could not build return series for stress."))
+
+    bps <- if (is.null(input$stress_bps)) 0 else input$stress_bps
+    tickers_shock <- names(w)
+    if (!is.null(input$stress_scope) && input$stress_scope == "sector" &&
+          !is.null(input$stress_sector_pick) && nzchar(input$stress_sector_pick)) {
+      tickers_shock <- holdings_tickers_in_sector(names(w), input$stress_sector_pick)
+      if (length(tickers_shock) == 0) tickers_shock <- names(w)
+    }
+
+    rw2 <- if (bps == 0) {
+      rw
+    } else {
+      apply_daily_return_shock_wide(rw, tickers_shock, bps / 10000)
+    }
+    shocked <- portfolio_returns_from_wide(rw2, w)
+    validate(need(!is.null(shocked) && nrow(shocked) >= 3, "Stressed path could not be computed."))
+
+    aligned <- inner_join(
+      base %>% select(date, baseline = cumulative_return),
+      shocked %>% select(date, stressed = cumulative_return),
+      by = "date"
+    )
+    validate(need(nrow(aligned) >= 3, "No overlapping dates between baseline and stressed series."))
+
+    long_df <- aligned %>%
+      pivot_longer(c(baseline, stressed), names_to = "series", values_to = "cumulative_return") %>%
+      mutate(series = ifelse(series == "baseline", "Baseline", "Stressed"))
+
+    sub <- if (bps == 0) {
+      "No daily bps shock (paths should coincide)."
+    } else {
+      paste0(
+        bps, " bps/day to ",
+        if (!is.null(input$stress_scope) && input$stress_scope == "sector" &&
+              !is.null(input$stress_sector_pick)) input$stress_sector_pick else "all holdings"
+      )
+    }
+
+    ggplot(long_df, aes(x = date, y = cumulative_return, color = series)) +
+      geom_line(linewidth = 1.05) +
+      geom_hline(yintercept = 0, linetype = "dotted", color = "gray50") +
+      labs(
+        title = "Full-sample cumulative return: baseline vs stressed",
+        subtitle = sub,
+        x = "Date", y = "Cumulative return", color = ""
+      ) +
+      scale_y_continuous(labels = scales::percent_format()) +
+      scale_color_manual(values = c("Baseline" = "#94a3b8", "Stressed" = "#22d3ee")) +
+      theme_minimal(base_size = 13) +
+      theme(legend.position = "bottom")
+  })
 
   # ══════════════════════════════════════════════════════════════════════════
   # EXISTING TABS — Price Trend / Returns / Cumulative / Forecast / Risk

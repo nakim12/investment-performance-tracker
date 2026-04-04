@@ -8,9 +8,9 @@
 
 ## What is it?
 
-**Portfolio Intelligence Lab** is a Shiny app in the browser. You define a **weighted portfolio** (tickers and weights, or a **sample template**), choose a **benchmark** such as SPY or QQQ, and pull a shared history of adjusted prices from Yahoo Finance. On top of that data you get **Diagnosis** and **Performance** for portfolio-level risk, return, and drawdowns versus the benchmark, plus **Price Trend**, **Forecast** (exploratory), and **Risk Analysis** when you want more detail on individual holdings and how they move together.
+**Portfolio Intelligence Lab** is a Shiny app in the browser. You define a **weighted portfolio** (tickers and weights, or a **sample template**), choose a **benchmark** such as SPY or QQQ, and pull a shared history of adjusted prices from Yahoo Finance. On top of that data you get **Diagnosis** (KPIs, insights, sector and return attribution, CSV/text exports) and **Performance** (your portfolio vs the benchmark plus per-ticker exploration). **Scenarios** replays preset stress windows and applies an optional mechanical daily return shock. **Methodology** documents definitions and limits. **Price Trend**, **Forecast** (exploratory), and **Risk Analysis** support deeper single-name views.
 
-It is built for questions like: *How does this mix behave versus a simple passive alternative, and where are the pressure points—concentration, correlation, tail risk?* Start from **Build Portfolio**, then use **Diagnosis** and **Performance** as the main portfolio story.
+It is built for questions like: *How does this mix behave versus a simple passive alternative, where are the pressure points, and what happens in rough historical patches?* Start from **Build Portfolio**, then use **Diagnosis**, **Performance**, and **Scenarios** as the main portfolio story.
 
 ---
 
@@ -24,8 +24,9 @@ Brokerage apps show **positions** and **P&L**. They rarely help you **compare yo
 
 1. **Define** — Tickers, weights (normalized to 100%), optional sample templates, benchmark (SPY, QQQ, VTI, DIA).
 2. **Load** — Daily adjusted prices via Yahoo Finance (`quantmod`); you pick the analysis window on the app.
-3. **Diagnose** — Portfolio-level risk/return, drawdowns, rolling metrics, concentration and correlation context vs. the benchmark.
-4. **Explore** — Performance (cumulative and return mechanics), optional ARIMA-style **Forecast** (exploratory, not a trading signal), and **Risk Analysis** for per-holding and cross-holding views.
+3. **Diagnose** — Portfolio-level risk/return, drawdowns, rolling metrics, concentration, correlations, holding and sector attribution, plain-language insights, and optional “what to consider next” prompts; export **.txt** or **.csv** from the diagnosis header.
+4. **Performance & scenarios** — Cumulative paths vs benchmark; **Scenarios** for historical episode slices and additive daily bps stress on all holdings or one sector.
+5. **Explore** — **Methodology** for formulas; **Price Trend**, **Forecast** (exploratory, not advice), and **Risk Analysis** for per-ticker views.
 
 Everything stays in one Shiny session so you are not jumping between spreadsheets and disconnected chart tools.
 
@@ -36,14 +37,15 @@ Everything stays in one Shiny session so you are not jumping between spreadsheet
 ```
 ┌─────────────────────────────────────────────────────────────┐
 │  Shiny client (browser)                                      │
-│  Navbar: Home · Build Portfolio · Diagnosis · Price Trend · │
-│          Performance · Forecast · Risk Analysis              │
+│  Navbar: Home · Build · Diagnosis · Price Trend · Performance · │
+│          Scenarios · Forecast · Risk · Methodology             │
 └─────────────────────────────┬───────────────────────────────┘
                               │ reactive inputs + outputs
                               ▼
 ┌─────────────────────────────────────────────────────────────┐
 │  app.R + R/ modules                                          │
-│  config · helpers · portfolio analytics · landing UI · theme│
+│  global.R loads: config · helpers · theme · portfolio · scenarios · │
+│  landing · methodology                                              │
 └─────────────────────────────┬───────────────────────────────┘
                               │ getSymbols / merges / stats
                               ▼
@@ -74,12 +76,15 @@ Dependencies for local runs and CI are declared in `DESCRIPTION`.
 ```
 Investment-Performance-Tracker/
 ├── app.R                         # Main Shiny UI + server
+├── global.R                      # Sources all modules in R/ (runs before app.R)
 ├── DESCRIPTION                   # Package imports (used by Actions for deps)
 ├── R/
-│   ├── config.R                  # Sectors, samples, benchmarks, theme
+│   ├── config.R                  # Sectors, samples, benchmarks, ggplot theme
 │   ├── helpers.R
-│   ├── portfolio.R               # Portfolio-level metrics & diagnosis
+│   ├── portfolio.R               # Portfolio metrics, attribution, insights
+│   ├── scenarios.R               # Stress presets & shock helpers
 │   ├── landing_ui.R              # Home / landing experience
+│   ├── methodology_ui.R          # Methodology tab copy
 │   └── app_theme.R               # Shared CSS
 ├── scripts/
 │   └── deploy_shinyapps.R        # CI / manual publish helper
@@ -111,7 +116,7 @@ Investment-Performance-Tracker/
    shiny::runApp()
    ```
 
-   Or open `app.R` in RStudio and click **Run App**.
+   Or open `app.R` in RStudio and click **Run App**. Keep the working directory at the project root so **`global.R`** loads the `R/` modules before **`app.R`**.
 
 ---
 

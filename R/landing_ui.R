@@ -665,7 +665,7 @@ landing_panel <- function() {
               tags$div(class = "landing-step-num", "03 — Explore"),
               tags$h3("Drill down when you want"),
               tags$p(
-                "Performance paths, price trends, forecasts, and ticker-level risk ",
+                "Performance paths, scenario replays, price trends, forecasts, and ticker-level risk ",
                 "charts stay available as supporting evidence—not the main story."
               )
             )
@@ -702,6 +702,11 @@ landing_panel <- function() {
                 class = "landing-feature",
                 tags$h4("Transparent limits"),
                 tags$p("Yahoo Finance data, historical windows, models as exploration—no black-box advice.")
+              ),
+              tags$div(
+                class = "landing-feature",
+                tags$h4("Scenarios & stress"),
+                tags$p("Replay known rough patches on your actual weights, then layer a simple daily return shock to see a mechanical what-if path.")
               )
             )
           )
@@ -715,6 +720,14 @@ landing_panel <- function() {
           tags$strong("Educational use only. "),
           "This tool does not provide personalized investment, tax, or legal advice. ",
           "Past performance and backtests are not guarantees of future results."
+        ),
+        tags$div(
+          class = "landing-footer-actions",
+          style = "display: flex; flex-wrap: wrap; gap: 10px; justify-content: center; margin-top: 16px;",
+          actionButton("landing_methodology", "Methodology",
+            class = "btn btn-sm landing-btn-ghost"),
+          actionButton("landing_scenarios", "Scenarios",
+            class = "btn btn-sm landing-btn-ghost")
         ),
         if (!use_shader) {
           tags$p(
