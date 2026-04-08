@@ -1,14 +1,14 @@
-# Helm
+# Axis
 
 **A Shiny workspace for self-directed investors who want to stress-test a portfolio—weights, benchmark, and risk—in one place before they commit to a story about “why this allocation.”**
 
-*GitHub:* [nakim12/investment-performance-tracker](https://github.com/nakim12/investment-performance-tracker) — repo folder name may still say “Investment Performance Tracker”; the live product name is **Helm**.
+*GitHub:* [nakim12/investment-performance-tracker](https://github.com/nakim12/investment-performance-tracker) — repo folder name may still say “Investment Performance Tracker”; the live product name is **Axis**.
 
 ---
 
 ## What is it?
 
-**Helm** is a Shiny app in the browser. You define a **weighted portfolio** (tickers and weights, or a **sample template**), choose a **benchmark** such as SPY or QQQ, and pull a shared history of adjusted prices from Yahoo Finance. On top of that data you get **Diagnosis** (KPIs, insights, sector and return attribution, CSV/text exports) and **Performance** (your portfolio vs the benchmark plus per-ticker exploration). **Scenarios** replays preset stress windows, applies an optional mechanical daily return shock, and can draw a **bootstrap fan** from historical portfolio returns. **Allocation Lab** suggests alternative long-only weights (min-variance with optional caps, inverse vol, equal weight, projected max Sharpe) on the same window. **Methodology** documents definitions and limits. **Holdings Explorer** groups **Price Trend** and exploratory **Forecast** views; **Risk Analysis** adds deeper single-name risk metrics.
+**Axis** is a Shiny app in the browser. You define a **weighted portfolio** (tickers and weights, or a **sample template**), choose a **benchmark** such as SPY or QQQ, and pull a shared history of adjusted prices from Yahoo Finance. On top of that data you get **Diagnosis** (KPIs, insights, sector and return attribution, CSV/text exports) and **Performance** (your portfolio vs the benchmark plus per-ticker exploration). **Scenarios** replays preset stress windows, applies an optional mechanical daily return shock, and can draw a **bootstrap fan** from historical portfolio returns. **Allocation Lab** suggests alternative long-only weights (min-variance with optional caps, inverse vol, equal weight, projected max Sharpe) on the same window. **Methodology** documents definitions and limits. **Holdings Explorer** groups **Price Trend** and exploratory **Forecast** views; **Risk Analysis** adds deeper single-name risk metrics.
 
 It is built for questions like: *How does this mix behave versus a simple passive alternative, where are the pressure points, and what happens in rough historical patches?* Start from **Build Portfolio**, then use **Diagnosis**, **Performance**, **Scenarios** (including optional bootstrap fan), and **Allocation Lab** for alternative weighting ideas on the same data window.
 

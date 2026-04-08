@@ -610,7 +610,7 @@ landing_panel <- function() {
       class = "landing-inner",
       tags$section(
         class = "landing-hero",
-        tags$p(class = "landing-eyebrow", "Helm"),
+        tags$p(class = "landing-eyebrow", "Axis"),
         tags$h1(
           HTML("Decisions first,<br><span class=\"landing-accent\">clarity always</span>")
         ),

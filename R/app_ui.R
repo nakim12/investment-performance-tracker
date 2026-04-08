@@ -75,7 +75,7 @@ app_ui <- function() {
 .diagnosis-downloads .btn { margin-left: 6px; margin-bottom: 6px; }
   "
   navbarPage(
-  title = "Helm",
+  title = "Axis",
   id    = "main_nav",
   header = tags$head(
     tags$style(HTML(paste(app_css, GLOBAL_APP_CSS, sep = "\n"))),

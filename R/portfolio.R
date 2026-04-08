@@ -563,7 +563,7 @@ diagnosis_export_lines <- function(p) {
   act <- generate_action_suggestions(
     m, p$return_attrib, rc, dr, p$holding_cor)
   lines <- c(
-    "Helm — Diagnosis export",
+    "Axis — Diagnosis export",
     paste("Generated:", format(Sys.time(), usetz = TRUE)),
     "",
     paste("Benchmark:", p$benchmark_name),

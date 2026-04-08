@@ -1,5 +1,5 @@
 Package: InvestmentPerformanceTracker
-Title: Helm — Shiny portfolio app (CI dependency manifest)
+Title: Axis — Shiny portfolio app (CI dependency manifest)
 Version: 0.0.0.9000
 Authors@R: person("Nathan", "Kim", role = c("aut", "cre"))
 Description: This repository is a Shiny application, not a published R package.
