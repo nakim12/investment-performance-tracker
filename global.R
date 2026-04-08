@@ -9,7 +9,9 @@ r_mods <- c(
   "scenarios.R",
   "allocation.R",
   "landing_ui.R",
-  "methodology_ui.R"
+  "methodology_ui.R",
+  "app_ui.R",
+  "app_server.R"
 )
 for (m in r_mods) {
   f <- file.path("R", m)

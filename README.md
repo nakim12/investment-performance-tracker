@@ -43,9 +43,9 @@ Everything stays in one Shiny session so you are not jumping between spreadsheet
                               │ reactive inputs + outputs
                               ▼
 ┌─────────────────────────────────────────────────────────────┐
-│  app.R + R/ modules                                          │
+│  app.R (entry) + R/ modules                                    │
 │  global.R loads: config · helpers · theme · portfolio · snapshots · │
-│  scenarios · allocation · landing · methodology                     │
+│  scenarios · allocation · landing · methodology · app_ui · app_server │
 └─────────────────────────────┬───────────────────────────────┘
                               │ getSymbols / merges / stats
                               ▼
@@ -75,7 +75,7 @@ Dependencies for local runs and CI are declared in `DESCRIPTION`.
 
 ```
 Investment-Performance-Tracker/
-├── app.R                         # Main Shiny UI + server
+├── app.R                         # Shiny entry (calls app_ui / app_server from R/)
 ├── global.R                      # Sources all modules in R/ (runs before app.R)
 ├── DESCRIPTION                   # Package imports (used by Actions for deps)
 ├── R/
@@ -87,6 +87,8 @@ Investment-Performance-Tracker/
 │   ├── allocation.R              # Allocation Lab optimizers (quadprog, heuristics)
 │   ├── landing_ui.R              # Home / landing experience
 │   ├── methodology_ui.R          # Methodology tab copy
+│   ├── app_ui.R                  # navbarPage UI definition
+│   ├── app_server.R              # Main server function
 │   └── app_theme.R               # Shared CSS
 ├── scripts/
 │   └── deploy_shinyapps.R        # CI / manual publish helper
