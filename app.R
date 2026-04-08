@@ -136,7 +136,21 @@ ui <- navbarPage(
             class = "btn-success btn-lg", style = "width: 100%;"),
           br(), br(),
           actionButton("clear_portfolio", "Clear All Holdings",
-            class = "btn-warning btn-sm")
+            class = "btn-warning btn-sm"),
+          hr(),
+          h4("Save & share"),
+          textInput("portfolio_snapshot_label", "Snapshot label (optional)",
+            placeholder = "e.g. Taxable account"),
+          downloadButton("download_portfolio_snapshot", "Download portfolio (.json)",
+            class = "btn-default btn-sm", style = "margin-top: 6px;"),
+          helpText(style = "font-size: 11px;",
+            "Exports weights, benchmark, and date range. Share the file or reload it here."),
+          fileInput("portfolio_snapshot_upload", "Load portfolio snapshot",
+            accept = c("application/json", ".json"),
+            buttonLabel = "Choose JSON…", placeholder = "No file selected",
+            width = "100%"),
+          helpText(style = "font-size: 11px;",
+            "After load, click ", tags$b("Analyze Portfolio"), " again to refresh metrics.")
         )
       ),
 
@@ -506,6 +520,8 @@ server <- function(input, output, session) {
     sector_return_attrib = NULL
   )
 
+  diagnosis_pins <- reactiveValues(a = NULL, b = NULL)
+
   # -- Landing page CTAs ----------------------------------------------------
 
   observeEvent(input$landing_start, {
@@ -601,6 +617,93 @@ server <- function(input, output, session) {
     portfolio$return_attrib <- NULL
     portfolio$sector_return_attrib <- NULL
   })
+
+  # -- Portfolio snapshot (.json) export / import ---------------------------
+
+  output$download_portfolio_snapshot <- downloadHandler(
+    filename = function() {
+      lab <- input$portfolio_snapshot_label
+      slug <- if (is.null(lab) || !nzchar(trimws(lab))) {
+        format(Sys.Date(), "%Y-%m-%d")
+      } else {
+        gsub("[^A-Za-z0-9._-]+", "-", trimws(lab))
+      }
+      sprintf("portfolio-snapshot-%s.json", slug)
+    },
+    content = function(file) {
+      req(nrow(portfolio$holdings) > 0)
+      ms <- if (isTRUE(portfolio$analyzed)) {
+        metrics_summary_for_json(portfolio$metrics)
+      } else {
+        NULL
+      }
+      snap <- build_portfolio_snapshot_list(
+        portfolio$holdings,
+        input$benchmark_ticker,
+        input$portfolio_date_range[1],
+        input$portfolio_date_range[2],
+        label = input$portfolio_snapshot_label,
+        metrics = ms
+      )
+      writeLines(
+        jsonlite::toJSON(snap, pretty = TRUE, auto_unbox = TRUE),
+        file,
+        useBytes = TRUE
+      )
+    }
+  )
+
+  observeEvent(input$portfolio_snapshot_upload, {
+    up <- input$portfolio_snapshot_upload
+    if (is.null(up) || !is.data.frame(up) || nrow(up) < 1L) {
+      return(invisible(NULL))
+    }
+    raw <- readBin(up$datapath[1], "raw", file.info(up$datapath[1])$size)
+    txt <- rawToChar(raw)
+    Encoding(txt) <- "UTF-8"
+    obj <- tryCatch(
+      parse_portfolio_snapshot(txt),
+      error = function(e) {
+        showNotification(conditionMessage(e), type = "error", duration = 8)
+        return(NULL)
+      }
+    )
+    req(obj)
+
+    portfolio$holdings <- snapshot_holdings_tibble(obj)
+    bench <- obj$benchmark_ticker
+    if (!bench %in% unname(benchmark_choices)) {
+      showNotification(
+        paste("Unknown benchmark in file:", bench, "— using SPY."),
+        type = "warning", duration = 5)
+      bench <- "SPY"
+    }
+    updateSelectInput(session, "benchmark_ticker", selected = bench)
+    dr <- obj$date_range
+    if (is.list(dr) && !is.null(dr$start) && !is.null(dr$end)) {
+      updateDateRangeInput(session, "portfolio_date_range",
+        start = as.Date(dr$start),
+        end   = as.Date(dr$end))
+    } else if (is.character(dr) && length(dr) >= 2L) {
+      updateDateRangeInput(session, "portfolio_date_range",
+        start = as.Date(dr[[1]]),
+        end   = as.Date(dr[[2]]))
+    }
+
+    portfolio$analyzed <- FALSE
+    portfolio$returns   <- NULL
+    portfolio$metrics   <- NULL
+    portfolio$return_attrib <- NULL
+    portfolio$sector_return_attrib <- NULL
+
+    lab <- obj$label
+    showNotification(
+      paste0(
+        "Loaded snapshot",
+        if (!is.null(lab) && nzchar(as.character(lab))) paste0(": ", lab) else ""
+      ),
+      type = "message")
+  }, ignoreNULL = TRUE, ignoreInit = TRUE)
 
   # -- Keep remove dropdown in sync -----------------------------------------
 
@@ -911,6 +1014,8 @@ server <- function(input, output, session) {
             div(class = "diagnosis-downloads", style = "text-align: right; padding-top: 4px;",
               downloadButton("download_diagnosis", "Diagnosis (.txt)",
                 class = "btn-default btn-sm"),
+              downloadButton("download_diagnosis_bundle", "Full report (.zip)",
+                class = "btn-default btn-sm"),
               downloadButton("download_metrics_csv", "Metrics (.csv)",
                 class = "btn-default btn-sm"),
               downloadButton("download_holding_attrib_csv", "Holding attribution (.csv)",
@@ -920,6 +1025,24 @@ server <- function(input, output, session) {
             )
           )
         )
+      ),
+
+      wellPanel(
+        h4("Compare saved runs"),
+        tags$p(class = "text-muted",
+          "Pins capture headline metrics for the ", tags$b("current"), " analysis only. ",
+          "They stay in this browser session until you clear them or refresh."),
+        fluidRow(
+          column(3, textInput("diagnosis_pin_a_label", "Pin A label", value = "Scenario A")),
+          column(3, textInput("diagnosis_pin_b_label", "Pin B label", value = "Scenario B")),
+          column(3, style = "margin-top: 25px;",
+            actionButton("diagnosis_pin_save_a", "Save current as A", class = "btn-sm btn-info")),
+          column(3, style = "margin-top: 25px;",
+            actionButton("diagnosis_pin_save_b", "Save current as B", class = "btn-sm btn-info"))
+        ),
+        actionButton("diagnosis_pins_clear", "Clear pins", class = "btn-sm btn-warning"),
+        br(), br(),
+        tableOutput("diagnosis_compare_table")
       ),
 
       # ── KPI Cards ──
@@ -1322,56 +1445,77 @@ server <- function(input, output, session) {
       theme(legend.position = "none")
   })
 
+  portfolio_as_diagnosis_list <- reactive({
+    req(portfolio$analyzed)
+    list(
+      metrics              = portfolio$metrics,
+      sector_weights       = portfolio$sector_weights,
+      risk_contrib         = portfolio$risk_contrib,
+      diversification      = portfolio$diversification,
+      holding_cor          = portfolio$holding_cor,
+      return_attrib        = portfolio$return_attrib,
+      sector_return_attrib = portfolio$sector_return_attrib,
+      holdings             = portfolio$holdings,
+      benchmark_name       = portfolio$benchmark_name
+    )
+  })
+
   output$download_diagnosis <- downloadHandler(
     filename = function() {
       sprintf("portfolio-diagnosis-%s.txt", Sys.Date())
     },
     content = function(file) {
+      writeLines(diagnosis_export_lines(portfolio_as_diagnosis_list()), file)
+    }
+  )
+
+  output$download_diagnosis_bundle <- downloadHandler(
+    filename = function() sprintf("portfolio-full-report-%s.zip", Sys.Date()),
+    content = function(file) {
       req(portfolio$analyzed)
-      m   <- portfolio$metrics
-      sw  <- portfolio$sector_weights
-      rc  <- portfolio$risk_contrib
-      dr  <- portfolio$diversification
-      ins <- generate_diagnosis_insights(m, sw, rc, dr, portfolio$holding_cor)
-      act <- generate_action_suggestions(
-        m, portfolio$return_attrib, rc, dr, portfolio$holding_cor)
-      lines <- c(
-        "Portfolio Intelligence Lab — Diagnosis export",
-        paste("Generated:", format(Sys.time(), usetz = TRUE)),
-        "",
-        paste("Benchmark:", portfolio$benchmark_name),
-        paste("Holdings:", paste(portfolio$holdings$ticker, collapse = ", ")),
-        "",
-        "--- Insights ---"
+      d <- tempfile("pil-report")
+      dir.create(d)
+      on.exit(unlink(d, recursive = TRUE), add = TRUE)
+
+      p <- portfolio_as_diagnosis_list()
+      writeLines(diagnosis_export_lines(p), file.path(d, "diagnosis.txt"))
+      utils::write.csv(
+        build_diagnosis_metrics_tibble(portfolio$metrics),
+        file.path(d, "metrics.csv"),
+        row.names = FALSE
       )
-      lines <- if (length(ins)) c(lines, paste0("- ", ins)) else c(lines, "(none)")
-      lines <- c(lines, "", "--- What to consider next ---")
-      lines <- if (length(act)) c(lines, paste0("- ", act)) else c(lines, "(none)")
-      lines <- c(lines, "", "--- Sector weights ---")
-      if (nrow(sw) > 0) {
-        tot <- sum(sw$weight)
-        lines <- c(lines, capture.output(
-          print(sw %>% mutate(pct = sprintf("%.1f%%", weight / tot * 100)), n = 100)
-        ))
+      ra <- portfolio$return_attrib
+      if (!is.null(ra) && nrow(ra) > 0) {
+        utils::write.csv(ra, file.path(d, "holding_attribution.csv"), row.names = FALSE)
       }
-      lines <- c(lines, "", "--- Return attribution (holdings) ---")
-      if (!is.null(portfolio$return_attrib) && nrow(portfolio$return_attrib) > 0) {
-        lines <- c(lines, capture.output(print(portfolio$return_attrib, n = 100)))
-      } else {
-        lines <- c(lines, "(not available)")
+      sr <- portfolio$sector_return_attrib
+      if (!is.null(sr) && nrow(sr) > 0) {
+        utils::write.csv(sr, file.path(d, "sector_attribution.csv"), row.names = FALSE)
       }
-      lines <- c(lines, "", "--- Sector return attribution ---")
-      if (!is.null(portfolio$sector_return_attrib) && nrow(portfolio$sector_return_attrib) > 0) {
-        lines <- c(lines, capture.output(print(portfolio$sector_return_attrib, n = 100)))
-      } else {
-        lines <- c(lines, "(not available)")
+      snap <- build_portfolio_snapshot_list(
+        portfolio$holdings,
+        input$benchmark_ticker,
+        input$portfolio_date_range[1],
+        input$portfolio_date_range[2],
+        label = "full-report-bundle",
+        metrics = metrics_summary_for_json(portfolio$metrics)
+      )
+      writeLines(
+        jsonlite::toJSON(snap, pretty = TRUE, auto_unbox = TRUE),
+        file.path(d, "portfolio_snapshot.json"),
+        useBytes = TRUE
+      )
+
+      owd <- setwd(d)
+      on.exit(setwd(owd), add = TRUE)
+      fl <- list.files()
+      if (!length(fl)) {
+        stop("Report bundle: no files to zip.", call. = FALSE)
       }
-      lines <- c(lines, "", "--- Key metrics ---")
-      lines <- c(lines, capture.output(print(build_diagnosis_metrics_tibble(m), n = 100)))
-      lines <- c(lines, "",
-        "Educational use only — not investment advice.",
-        "Past performance does not guarantee future results.")
-      writeLines(lines, file)
+      utils::zip(zipfile = file, files = fl)
+      if (!file.exists(file)) {
+        stop("Report bundle: zip failed (is 'zip' installed on this system?).", call. = FALSE)
+      }
     }
   )
 
@@ -1420,6 +1564,43 @@ server <- function(input, output, session) {
       }
     }
   )
+
+  observeEvent(input$diagnosis_pin_save_a, {
+    req(portfolio$analyzed)
+    diagnosis_pins$a <- build_diagnosis_pin(
+      input$diagnosis_pin_a_label,
+      portfolio$metrics,
+      portfolio$holdings,
+      portfolio$benchmark_name
+    )
+    showNotification("Saved diagnosis pin A.", type = "message")
+  })
+
+  observeEvent(input$diagnosis_pin_save_b, {
+    req(portfolio$analyzed)
+    diagnosis_pins$b <- build_diagnosis_pin(
+      input$diagnosis_pin_b_label,
+      portfolio$metrics,
+      portfolio$holdings,
+      portfolio$benchmark_name
+    )
+    showNotification("Saved diagnosis pin B.", type = "message")
+  })
+
+  observeEvent(input$diagnosis_pins_clear, {
+    diagnosis_pins$a <- NULL
+    diagnosis_pins$b <- NULL
+    showNotification("Cleared diagnosis pins.", type = "message")
+  })
+
+  output$diagnosis_compare_table <- renderTable({
+    req(portfolio$analyzed)
+    compare_diagnosis_pins_table(
+      build_diagnosis_metrics_tibble(portfolio$metrics),
+      diagnosis_pins$a,
+      diagnosis_pins$b
+    )
+  }, striped = TRUE, align = "l", width = "100%")
 
   # ══════════════════════════════════════════════════════════════════════════
   # PERFORMANCE TAB — portfolio vs benchmark (Phase 2)

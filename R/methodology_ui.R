@@ -103,6 +103,17 @@ methodology_panel <- function() {
     ),
 
     wellPanel(
+      h4("Snapshots, pins, and bundled export"),
+      tags$ul(
+        tags$li(tags$b("Portfolio JSON"), " stores weights, benchmark ticker, analysis dates, and (if you already analyzed) a compact numeric metrics summary. ",
+                "You can reload it from ", tags$b("Build Portfolio"), " or share the file with yourself on another machine."),
+        tags$li(tags$b("Diagnosis pins"), " capture the headline metrics table for the ", tags$b("current"), " run so you can compare after changing weights. ",
+                "They live in this browser session only and disappear on refresh."),
+        tags$li(tags$b("Full report (.zip)"), " bundles the diagnosis text export, key CSVs, and the portfolio JSON snapshot.")
+      )
+    ),
+
+    wellPanel(
       h4("Disclaimer"),
       tags$p(style = "font-weight: 500;",
         "Educational software only — not investment, tax, or legal advice. ",

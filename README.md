@@ -22,9 +22,9 @@ Brokerage apps show **positions** and **P&L**. They rarely help you **compare yo
 
 ## How the session flows
 
-1. **Define** — Tickers, weights (normalized to 100%), optional sample templates, benchmark (SPY, QQQ, VTI, DIA).
+1. **Define** — Tickers, weights (normalized to 100%), optional sample templates, benchmark (SPY, QQQ, VTI, DIA). You can **download or load a portfolio JSON** snapshot (weights, benchmark, dates) to reuse or share a setup.
 2. **Load** — Daily adjusted prices via Yahoo Finance (`quantmod`); you pick the analysis window on the app.
-3. **Diagnose** — Portfolio-level risk/return, drawdowns, rolling metrics, concentration, correlations, holding and sector attribution, plain-language insights, and optional “what to consider next” prompts; export **.txt** or **.csv** from the diagnosis header.
+3. **Diagnose** — Portfolio-level risk/return, drawdowns, rolling metrics, concentration, correlations, holding and sector attribution, plain-language insights, and optional “what to consider next” prompts; export **.txt**, **.csv**, or a **full report (.zip)**. **Pins** (session-only) let you compare the headline metrics table before and after you change the portfolio.
 4. **Performance, scenarios & allocation** — Cumulative paths vs benchmark; **Scenarios** for historical episodes, bps stress, and bootstrap fan; **Allocation Lab** for model weights vs yours.
 5. **Explore** — **Methodology** for formulas; **Holdings Explorer** (price trends and exploratory forecasts) and **Risk Analysis** for per-ticker views.
 
@@ -44,8 +44,8 @@ Everything stays in one Shiny session so you are not jumping between spreadsheet
                               ▼
 ┌─────────────────────────────────────────────────────────────┐
 │  app.R + R/ modules                                          │
-│  global.R loads: config · helpers · theme · portfolio · scenarios · │
-│  allocation · landing · methodology                                 │
+│  global.R loads: config · helpers · theme · portfolio · snapshots · │
+│  scenarios · allocation · landing · methodology                     │
 └─────────────────────────────┬───────────────────────────────┘
                               │ getSymbols / merges / stats
                               ▼
@@ -82,6 +82,7 @@ Investment-Performance-Tracker/
 │   ├── config.R                  # Sectors, samples, benchmarks, ggplot theme
 │   ├── helpers.R
 │   ├── portfolio.R               # Portfolio metrics, attribution, insights
+│   ├── snapshots.R               # JSON snapshots, diagnosis pin compare helpers
 │   ├── scenarios.R               # Stress presets & shock helpers
 │   ├── allocation.R              # Allocation Lab optimizers (quadprog, heuristics)
 │   ├── landing_ui.R              # Home / landing experience
@@ -105,7 +106,7 @@ Investment-Performance-Tracker/
    ```r
    install.packages(c(
      "shiny", "shinycssloaders", "quantmod", "zoo", "forecast",
-     "tidyr", "scales", "reshape2", "dplyr", "ggplot2", "quadprog"
+     "tidyr", "scales", "reshape2", "dplyr", "ggplot2", "quadprog", "jsonlite"
    ))
    ```
 

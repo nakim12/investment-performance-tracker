@@ -553,6 +553,58 @@ generate_diagnosis_insights <- function(metrics, sector_weights,
   c(base, extra)
 }
 
+# Text lines for diagnosis .txt export and bundled reports (expects portfolio-like list).
+diagnosis_export_lines <- function(p) {
+  m   <- p$metrics
+  sw  <- p$sector_weights
+  rc  <- p$risk_contrib
+  dr  <- p$diversification
+  ins <- generate_diagnosis_insights(m, sw, rc, dr, p$holding_cor)
+  act <- generate_action_suggestions(
+    m, p$return_attrib, rc, dr, p$holding_cor)
+  lines <- c(
+    "Portfolio Intelligence Lab — Diagnosis export",
+    paste("Generated:", format(Sys.time(), usetz = TRUE)),
+    "",
+    paste("Benchmark:", p$benchmark_name),
+    paste("Holdings:", paste(p$holdings$ticker, collapse = ", ")),
+    "",
+    "--- Insights ---"
+  )
+  lines <- if (length(ins)) c(lines, paste0("- ", ins)) else c(lines, "(none)")
+  lines <- c(lines, "", "--- What to consider next ---")
+  lines <- if (length(act)) c(lines, paste0("- ", act)) else c(lines, "(none)")
+  lines <- c(lines, "", "--- Sector weights ---")
+  if (!is.null(sw) && nrow(sw) > 0) {
+    tot <- sum(sw$weight)
+    lines <- c(lines, capture.output(
+      print(sw %>% mutate(pct = sprintf("%.1f%%", weight / tot * 100)), n = 100)
+    ))
+  } else {
+    lines <- c(lines, "(not available)")
+  }
+  lines <- c(lines, "", "--- Return attribution (holdings) ---")
+  ra <- p$return_attrib
+  if (!is.null(ra) && nrow(ra) > 0) {
+    lines <- c(lines, capture.output(print(ra, n = 100)))
+  } else {
+    lines <- c(lines, "(not available)")
+  }
+  lines <- c(lines, "", "--- Sector return attribution ---")
+  sr <- p$sector_return_attrib
+  if (!is.null(sr) && nrow(sr) > 0) {
+    lines <- c(lines, capture.output(print(sr, n = 100)))
+  } else {
+    lines <- c(lines, "(not available)")
+  }
+  lines <- c(lines, "", "--- Key metrics ---")
+  lines <- c(lines, capture.output(print(build_diagnosis_metrics_tibble(m), n = 100)))
+  lines <- c(lines, "",
+    "Educational use only — not investment advice.",
+    "Past performance does not guarantee future results.")
+  lines
+}
+
 # Tibble for diagnosis metrics table and CSV export (formatted character values).
 build_diagnosis_metrics_tibble <- function(m) {
   if (is.null(m) || !length(m)) {
