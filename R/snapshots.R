@@ -40,7 +40,7 @@ parse_portfolio_snapshot <- function(raw) {
   )
   if (!is.list(obj)) stop("Snapshot root must be a JSON object.", call. = FALSE)
   if (is.null(obj$format) || obj$format != SNAPSHOT_FORMAT) {
-    stop("Not a Portfolio Intelligence Lab portfolio snapshot (wrong format field).", call. = FALSE)
+    stop("Not a Helm portfolio snapshot (wrong format field).", call. = FALSE)
   }
   ver <- suppressWarnings(as.integer(obj$version))
   if (is.na(ver) || ver != SNAPSHOT_VERSION) {
