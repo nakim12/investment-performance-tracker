@@ -54,7 +54,7 @@ app_files <- c(
   sort(r_files)
 )
 
-rsconnect::deployApp(
+deploy_args <- list(
   appDir        = ".",
   appPrimaryDoc = "app.R",
   appName       = app_name,
@@ -62,3 +62,46 @@ rsconnect::deployApp(
   lint          = FALSE,
   forceUpdate   = TRUE
 )
+
+# shinyapps.io sometimes returns HTTP 409 while another deploy is still in flight.
+max_attempts <- as.integer(Sys.getenv("DEPLOY_MAX_ATTEMPTS", "5"))
+if (is.na(max_attempts) || max_attempts < 1L) max_attempts <- 5L
+base_wait <- as.integer(Sys.getenv("DEPLOY_RETRY_WAIT_SEC", "45"))
+if (is.na(base_wait) || base_wait < 5L) base_wait <- 45L
+
+is_transient_deploy_error <- function(e) {
+  msg <- paste(conditionMessage(e), collapse = " ")
+  grepl(
+    "409|already in progress|Unable to dispatch task|tasks already in progress",
+    msg,
+    ignore.case = TRUE
+  )
+}
+
+for (attempt in seq_len(max_attempts)) {
+  outcome <- tryCatch(
+    {
+      do.call(rsconnect::deployApp, deploy_args)
+      list(ok = TRUE)
+    },
+    error = function(e) {
+      list(ok = FALSE, err = e, transient = is_transient_deploy_error(e))
+    }
+  )
+
+  if (isTRUE(outcome$ok)) {
+    break
+  }
+
+  if (!outcome$transient || attempt >= max_attempts) {
+    stop(conditionMessage(outcome$err), call. = FALSE)
+  }
+
+  wait_sec <- min(base_wait * (2^(attempt - 1L)), 300L)
+  message(
+    "Transient shinyapps.io deploy conflict (HTTP 409 or similar). ",
+    "Attempt ", attempt, "/", max_attempts, "; waiting ", wait_sec,
+    " s before retry..."
+  )
+  Sys.sleep(wait_sec)
+}

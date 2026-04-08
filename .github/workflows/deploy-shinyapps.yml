@@ -32,6 +32,10 @@ permissions:
 
 jobs:
   deploy:
+    # One deploy at a time: shinyapps.io returns HTTP 409 if a prior task is still running.
+    concurrency:
+      group: shinyapps-deploy
+      cancel-in-progress: false
     runs-on: ubuntu-latest
     timeout-minutes: 45
 
