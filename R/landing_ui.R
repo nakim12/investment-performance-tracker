@@ -665,7 +665,7 @@ landing_panel <- function() {
               tags$div(class = "landing-step-num", "03 — Explore"),
               tags$h3("Drill down when you want"),
               tags$p(
-                "Performance paths, scenario replays, price trends, forecasts, and ticker-level risk ",
+                "Performance paths, scenario replays, Holdings Explorer (trends and forecasts), and ticker-level risk ",
                 "charts stay available as supporting evidence—not the main story."
               )
             )

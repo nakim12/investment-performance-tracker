@@ -8,7 +8,7 @@
 
 ## What is it?
 
-**Portfolio Intelligence Lab** is a Shiny app in the browser. You define a **weighted portfolio** (tickers and weights, or a **sample template**), choose a **benchmark** such as SPY or QQQ, and pull a shared history of adjusted prices from Yahoo Finance. On top of that data you get **Diagnosis** (KPIs, insights, sector and return attribution, CSV/text exports) and **Performance** (your portfolio vs the benchmark plus per-ticker exploration). **Scenarios** replays preset stress windows, applies an optional mechanical daily return shock, and can draw a **bootstrap fan** from historical portfolio returns. **Allocation Lab** suggests alternative long-only weights (min-variance with optional caps, inverse vol, equal weight, projected max Sharpe) on the same window. **Methodology** documents definitions and limits. **Price Trend**, **Forecast** (exploratory), and **Risk Analysis** support deeper single-name views.
+**Portfolio Intelligence Lab** is a Shiny app in the browser. You define a **weighted portfolio** (tickers and weights, or a **sample template**), choose a **benchmark** such as SPY or QQQ, and pull a shared history of adjusted prices from Yahoo Finance. On top of that data you get **Diagnosis** (KPIs, insights, sector and return attribution, CSV/text exports) and **Performance** (your portfolio vs the benchmark plus per-ticker exploration). **Scenarios** replays preset stress windows, applies an optional mechanical daily return shock, and can draw a **bootstrap fan** from historical portfolio returns. **Allocation Lab** suggests alternative long-only weights (min-variance with optional caps, inverse vol, equal weight, projected max Sharpe) on the same window. **Methodology** documents definitions and limits. **Holdings Explorer** groups **Price Trend** and exploratory **Forecast** views; **Risk Analysis** adds deeper single-name risk metrics.
 
 It is built for questions like: *How does this mix behave versus a simple passive alternative, where are the pressure points, and what happens in rough historical patches?* Start from **Build Portfolio**, then use **Diagnosis**, **Performance**, **Scenarios** (including optional bootstrap fan), and **Allocation Lab** for alternative weighting ideas on the same data window.
 
@@ -26,7 +26,7 @@ Brokerage apps show **positions** and **P&L**. They rarely help you **compare yo
 2. **Load** — Daily adjusted prices via Yahoo Finance (`quantmod`); you pick the analysis window on the app.
 3. **Diagnose** — Portfolio-level risk/return, drawdowns, rolling metrics, concentration, correlations, holding and sector attribution, plain-language insights, and optional “what to consider next” prompts; export **.txt** or **.csv** from the diagnosis header.
 4. **Performance, scenarios & allocation** — Cumulative paths vs benchmark; **Scenarios** for historical episodes, bps stress, and bootstrap fan; **Allocation Lab** for model weights vs yours.
-5. **Explore** — **Methodology** for formulas; **Price Trend**, **Forecast** (exploratory, not advice), and **Risk Analysis** for per-ticker views.
+5. **Explore** — **Methodology** for formulas; **Holdings Explorer** (price trends and exploratory forecasts) and **Risk Analysis** for per-ticker views.
 
 Everything stays in one Shiny session so you are not jumping between spreadsheets and disconnected chart tools.
 
@@ -37,8 +37,8 @@ Everything stays in one Shiny session so you are not jumping between spreadsheet
 ```
 ┌─────────────────────────────────────────────────────────────┐
 │  Shiny client (browser)                                      │
-│  Navbar: Home · Build · Diagnosis · Price Trend · Performance · │
-│          Scenarios · Allocation Lab · Forecast · Risk · Methodology │
+│  Navbar: Home · Build · Diagnosis · Holdings Explorer · Performance · │
+│          Scenarios · Allocation Lab · Risk · Methodology │
 └─────────────────────────────┬───────────────────────────────┘
                               │ reactive inputs + outputs
                               ▼

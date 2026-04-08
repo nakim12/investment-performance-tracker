@@ -14,8 +14,8 @@ methodology_panel <- function() {
       tags$ul(
         tags$li("Daily adjusted close prices from Yahoo Finance via ", tags$code("quantmod"), "."),
         tags$li("Your analysis window is the date range chosen on ", tags$b("Build Portfolio"), "."),
-        tags$li("The Performance tab’s per-ticker charts use the tickers selected on ",
-                tags$b("Price Trend"), " and about the last year of data (separate from the portfolio builder window).")
+        tags$li("The Performance tab’s per-ticker charts use the tickers selected under ",
+                tags$b("Holdings Explorer"), " → ", tags$b("Price Trend"), " and about the last year of data (separate from the portfolio builder window).")
       )
     ),
 
@@ -71,7 +71,7 @@ methodology_panel <- function() {
     ),
 
     wellPanel(
-      h4("Forecast tab"),
+      h4("Holdings Explorer → Forecast"),
       tags$p(tags$b("ARIMA"), " on prices is ", tags$b("exploratory"), ": useful for methodology demos, not a trading signal. ",
              "Uncertainty and model error are real; treat forecasts as one input among many.")
     ),

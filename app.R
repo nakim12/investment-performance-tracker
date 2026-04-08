@@ -184,38 +184,77 @@ ui <- navbarPage(
     uiOutput("diagnosis_content")
   ),
 
-  # ── Tab 4: Price Trend ─────────────────────────────────────────────────────
+  # ── Tab 4: Holdings Explorer (single-name: trend + forecast) ────────────────
 
-  tabPanel("Price Trend",
-    sidebarLayout(
-      sidebarPanel(
-        selectInput("sector_filter", "Filter by Sector:",
-          choices  = c("All Sectors" = "all", names(stock_sectors)),
-          selected = "all"),
-        selectInput("tickers", "Select Stocks to Compare:",
-          choices  = NULL, selected = NULL, multiple = TRUE),
-        actionButton("select_all", "Select All",
-          class = "btn-sm btn-primary", style = "margin-bottom: 10px;"),
-        actionButton("clear_all", "Clear All",
-          class = "btn-sm btn-warning", style = "margin-bottom: 10px;"),
-        sliderInput("ma_window", "Moving Average Window (days):",
-          min = 5, max = 100, value = 20),
-        hr(),
-        helpText("Select stocks and adjust the moving average window to analyze price trends."),
-        br(),
-        tags$small(
-          tags$b("Available Sectors:"),
-          tags$ul(
-            tags$li("Technology: FAANG + semiconductors"),
-            tags$li("Financial: Banks & payment processors"),
-            tags$li("Healthcare: Pharma & insurance"),
-            tags$li("Consumer: Retail & restaurants"),
-            tags$li("Energy: Oil & gas companies")
+  tabPanel("Holdings Explorer",
+    tags$p(class = "text-muted",
+      "Single-name charts and exploratory forecasts. For portfolio-level results use ",
+      tags$b("Diagnosis"), ", ", tags$b("Performance"), ", and ", tags$b("Risk Analysis"), "."
+    ),
+    tabsetPanel(
+      id = "holdings_explorer_tabs",
+      tabPanel("Price Trend",
+        sidebarLayout(
+          sidebarPanel(
+            selectInput("sector_filter", "Filter by Sector:",
+              choices  = c("All Sectors" = "all", names(stock_sectors)),
+              selected = "all"),
+            selectInput("tickers", "Select Stocks to Compare:",
+              choices  = NULL, selected = NULL, multiple = TRUE),
+            actionButton("select_all", "Select All",
+              class = "btn-sm btn-primary", style = "margin-bottom: 10px;"),
+            actionButton("clear_all", "Clear All",
+              class = "btn-sm btn-warning", style = "margin-bottom: 10px;"),
+            sliderInput("ma_window", "Moving Average Window (days):",
+              min = 5, max = 100, value = 20),
+            hr(),
+            helpText("Select stocks and adjust the moving average window to analyze price trends."),
+            br(),
+            tags$small(
+              tags$b("Available Sectors:"),
+              tags$ul(
+                tags$li("Technology: FAANG + semiconductors"),
+                tags$li("Financial: Banks & payment processors"),
+                tags$li("Healthcare: Pharma & insurance"),
+                tags$li("Consumer: Retail & restaurants"),
+                tags$li("Energy: Oil & gas companies")
+              )
+            )
+          ),
+          mainPanel(
+            withSpinner(plotOutput("pricePlot"), type = 4, color = "#22d3ee")
           )
         )
       ),
-      mainPanel(
-        withSpinner(plotOutput("pricePlot"), type = 4, color = "#22d3ee")
+      tabPanel("Forecast",
+        sidebarLayout(
+          sidebarPanel(
+            selectInput("forecast_sector", "Filter by Sector:",
+              choices  = c("All Sectors" = "all", names(stock_sectors)),
+              selected = "all"),
+            selectInput("forecast_ticker", "Select Ticker to Forecast:",
+              choices = NULL),
+            sliderInput("horizon", "Forecast Horizon (days):",
+              min = 5, max = 90, value = 30),
+            hr(),
+            radioButtons("forecast_mode", "Forecast Mode:",
+              choices  = c("Conservative (Recommended)" = "conservative",
+                           "Aggressive (Less Reliable)"  = "aggressive"),
+              selected = "conservative"),
+            helpText("Conservative mode requires more historical data for reliable forecasts."),
+            hr(),
+            textOutput("dataAvailability")
+          ),
+          mainPanel(
+            withSpinner(plotOutput("forecastPlot"), type = 4, color = "#22d3ee"),
+            br(),
+            wellPanel(
+              h4("Model Evaluation Metrics"),
+              verbatimTextOutput("forecastMetrics")
+            ),
+            withSpinner(plotOutput("forecastAccuracyPlot"), type = 4, color = "#22d3ee")
+          )
+        )
       )
     )
   ),
@@ -228,7 +267,8 @@ ui <- navbarPage(
       hr(),
       h3("Per-ticker exploration"),
       tags$p(class = "text-muted",
-        "Uses tickers selected on the Price Trend tab (last ~1 year of Yahoo data)."
+        "Uses tickers selected under ", tags$b("Holdings Explorer"), " → ",
+        tags$b("Price Trend"), " (last ~1 year of Yahoo data)."
       ),
       h4("Cumulative performance"),
       tags$p(class = "text-muted",
@@ -363,40 +403,7 @@ ui <- navbarPage(
     )
   ),
 
-  # ── Tab 8: Forecast ─────────────────────────────────────────────────────────
-
-  tabPanel("Forecast",
-    sidebarLayout(
-      sidebarPanel(
-        selectInput("forecast_sector", "Filter by Sector:",
-          choices  = c("All Sectors" = "all", names(stock_sectors)),
-          selected = "all"),
-        selectInput("forecast_ticker", "Select Ticker to Forecast:",
-          choices = NULL),
-        sliderInput("horizon", "Forecast Horizon (days):",
-          min = 5, max = 90, value = 30),
-        hr(),
-        radioButtons("forecast_mode", "Forecast Mode:",
-          choices  = c("Conservative (Recommended)" = "conservative",
-                       "Aggressive (Less Reliable)"  = "aggressive"),
-          selected = "conservative"),
-        helpText("Conservative mode requires more historical data for reliable forecasts."),
-        hr(),
-        textOutput("dataAvailability")
-      ),
-      mainPanel(
-        withSpinner(plotOutput("forecastPlot"), type = 4, color = "#22d3ee"),
-        br(),
-        wellPanel(
-          h4("Model Evaluation Metrics"),
-          verbatimTextOutput("forecastMetrics")
-        ),
-        withSpinner(plotOutput("forecastAccuracyPlot"), type = 4, color = "#22d3ee")
-      )
-    )
-  ),
-
-  # ── Tab 9: Risk Analysis ────────────────────────────────────────────────────
+  # ── Tab 8: Risk Analysis ────────────────────────────────────────────────────
 
   tabPanel("Risk Analysis",
     sidebarLayout(
@@ -438,7 +445,7 @@ ui <- navbarPage(
     )
   ),
 
-  # ── Tab 10: Methodology ─────────────────────────────────────────────────────
+  # ── Tab 9: Methodology ─────────────────────────────────────────────────────
 
   tabPanel("Methodology", methodology_panel())
 )
@@ -1892,10 +1899,10 @@ server <- function(input, output, session) {
   })
 
   # ══════════════════════════════════════════════════════════════════════════
-  # EXISTING TABS — Price Trend / Returns / Cumulative / Forecast / Risk
+  # EXISTING TABS — Holdings Explorer (Price Trend, Forecast) / Performance / Risk
   # ══════════════════════════════════════════════════════════════════════════
 
-  # -- Sector filter observers (Price Trend) --------------------------------
+  # -- Sector filter observers (Holdings Explorer → Price Trend) ------------
 
   observe({
     selected_sector <- input$sector_filter
@@ -1945,7 +1952,7 @@ server <- function(input, output, session) {
     updateSelectInput(session, "tickers", selected = character(0))
   })
 
-  # -- Stock data reactive (Price Trend / Returns / Cumulative) -------------
+  # -- Stock data reactive (Holdings Explorer tickers / Performance charts) --
 
   stock_data <- reactive({
     if (is.null(input$tickers) || length(input$tickers) == 0) return(NULL)
