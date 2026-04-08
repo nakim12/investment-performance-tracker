@@ -83,7 +83,22 @@ methodology_panel <- function() {
                 "Summary stats are descriptive only."),
         tags$li(tags$b("Additive daily shock:"), " the same fixed ", tags$b("basis-point"), " amount is added to each selected holding’s ",
                 "daily simple return on every day in your analysis sample; the portfolio is recomputed with fixed weights. ",
-                "This is a mechanical sensitivity tool, not a model of how markets behave under stress.")
+                "This is a mechanical sensitivity tool, not a model of how markets behave under stress."),
+        tags$li(tags$b("Bootstrap fan:"), " independent resamples of the portfolio’s realized daily returns (same fixed weights) are compounded forward for a chosen horizon. ",
+                "Bands show simulation percentiles; this is ", tags$b("not"), " a structural forecast and ignores drift, autocorrelation, and regime change.")
+      )
+    ),
+
+    wellPanel(
+      h4("Allocation Lab"),
+      tags$ul(
+        tags$li(tags$b("Inputs:"), " sample mean and covariance of daily simple returns on your analysis window, annualized (×252 and ×252 for cov). ",
+                "Your current weights are compared to alternative rules on that same window only."),
+        tags$li(tags$b("Min variance:"), " long-only, fully invested portfolio that minimizes variance subject to an optional per-name cap (solved with quadratic programming)."),
+        tags$li(tags$b("Inverse volatility:"), " weights proportional to 1 / annualized volatility (diagonal of the estimated covariance)."),
+        tags$li(tags$b("Equal weight:"), " 1/", tags$em("n"), " on each name in the covariance sample."),
+        tags$li(tags$b("Max Sharpe (projected):"), " unconstrained mean–variance tangency weights, then negative weights are set to zero and the vector is renormalized. ",
+                "That is a common heuristic, ", tags$b("not"), " the true constrained max-Sharpe solution; treat it as exploratory.")
       )
     ),
 

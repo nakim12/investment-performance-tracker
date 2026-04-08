@@ -6,6 +6,7 @@ r_mods <- c(
   "app_theme.R",
   "portfolio.R",
   "scenarios.R",
+  "allocation.R",
   "landing_ui.R",
   "methodology_ui.R"
 )

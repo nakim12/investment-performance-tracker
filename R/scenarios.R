@@ -108,3 +108,32 @@ holdings_tickers_in_sector <- function(holding_tickers, sector_name) {
   st <- stock_sectors[[sector_name]]
   intersect(holding_tickers, st)
 }
+
+# Bootstrap resample of portfolio daily returns (fixed weights); descriptive fan only.
+bootstrap_fan_from_returns <- function(r_daily, horizon, n_sims, seed = 1L) {
+  r <- as.numeric(r_daily)
+  r <- r[is.finite(r)]
+  if (length(r) < 10L) return(NULL)
+  h <- as.integer(horizon)
+  ns <- as.integer(n_sims)
+  if (is.na(h) || h < 1L) return(NULL)
+  if (is.na(ns) || ns < 20L) return(NULL)
+  set.seed(as.integer(seed))
+  out <- matrix(0, nrow = ns, ncol = h + 1L)
+  for (i in seq_len(ns)) {
+    idx <- sample.int(length(r), h, replace = TRUE)
+    rd <- r[idx]
+    out[i, ] <- cumprod(c(1, 1 + rd)) - 1
+  }
+  days <- 0:h
+  qs <- apply(out, 2, stats::quantile,
+    probs = c(0.05, 0.5, 0.95), na.rm = TRUE, type = 7)
+  n_show <- min(80L, ns)
+  list(
+    days = days,
+    p05 = as.numeric(qs[1, ]),
+    p50 = as.numeric(qs[2, ]),
+    p95 = as.numeric(qs[3, ]),
+    sample_matrix = out[seq_len(n_show), , drop = FALSE]
+  )
+}

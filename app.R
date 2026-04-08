@@ -278,6 +278,15 @@ ui <- navbarPage(
         helpText("Mechanical sensitivity only: same bps added to each affected holding’s daily return, then the portfolio is recomputed. ",
                  "0 bps = baseline path."),
         hr(),
+        h4("Bootstrap fan (portfolio)"),
+        sliderInput("stress_fan_horizon", "Forward horizon (trading days)",
+          min = 5, max = 252, value = 63, step = 1),
+        sliderInput("stress_fan_n_sims", "Number of simulated paths",
+          min = 100, max = 3000, value = 800, step = 50),
+        numericInput("stress_fan_seed", "Random seed", value = 1, min = 1, max = 99999, step = 1),
+        helpText("Resamples historical portfolio daily returns with your fixed weights. ",
+                 "Illustrative dispersion only—not a forecast of future regimes."),
+        hr(),
         tags$p(class = "text-muted", style = "font-size: 12px;",
           "Run ", tags$b("Analyze Portfolio"), " on ",
           tags$b("Build Portfolio"), " first."
@@ -296,12 +305,65 @@ ui <- navbarPage(
         tags$p(class = "text-muted",
           "Baseline uses your analyzed portfolio as computed on the ",
           tags$b("Diagnosis"), " tab. Stressed path applies the bps adjustment only to the scope you selected."
+        ),
+        hr(),
+        h3("Bootstrap fan chart (fixed weights)"),
+        withSpinner(plotOutput("stress_fan_plot", height = "320px"),
+          type = 4, color = "#22d3ee"),
+        tags$p(class = "text-muted",
+          "Each path stacks independent draws from your portfolio’s realized daily returns; ",
+          "the band is the 5th–95th percentile across simulations."
         )
       )
     )
   ),
 
-  # ── Tab 7: Forecast ─────────────────────────────────────────────────────────
+  # ── Tab 7: Allocation Lab ───────────────────────────────────────────────────
+
+  tabPanel("Allocation Lab",
+    sidebarLayout(
+      sidebarPanel(
+        width = 3,
+        h4("Alternative weights"),
+        selectInput("alloc_method", "Construction method",
+          choices = c(
+            "Min variance (long-only, optional cap)" = "minvar",
+            "Inverse volatility" = "invvol",
+            "Equal weight" = "equal",
+            "Max Sharpe (projected long-only)" = "maxsharpe_proj"
+          ),
+          selected = "minvar"),
+        conditionalPanel(
+          condition = "input.alloc_method == 'minvar'",
+          sliderInput("alloc_max_w_pct", "Max weight per name (%)",
+            min = 5, max = 100, value = 100, step = 1),
+          helpText("100% = no cap. Lower caps tighten concentration; the solver stays long-only and fully invested.")
+        ),
+        hr(),
+        tags$p(class = "text-muted", style = "font-size: 12px;",
+          "Uses the same price history as your last ", tags$b("Analyze Portfolio"), " run. ",
+          "Compares your current weights to a model portfolio on that window."
+        )
+      ),
+      mainPanel(
+        width = 9,
+        h3("Current vs proposed allocation"),
+        uiOutput("alloc_lab_need_analyze"),
+        fluidRow(
+          column(7, withSpinner(tableOutput("alloc_weights_table"), type = 4, color = "#22d3ee")),
+          column(5, withSpinner(tableOutput("alloc_metrics_table"), type = 4, color = "#22d3ee"))
+        ),
+        withSpinner(plotOutput("alloc_weights_plot", height = "360px"),
+          type = 4, color = "#22d3ee"),
+        tags$p(class = "text-muted",
+          tags$b("Max Sharpe (projected)"), " solves the unconstrained tangency portfolio, ",
+          "then clips negative weights and renormalizes—an approximation, not a constrained optimizer."
+        )
+      )
+    )
+  ),
+
+  # ── Tab 8: Forecast ─────────────────────────────────────────────────────────
 
   tabPanel("Forecast",
     sidebarLayout(
@@ -334,7 +396,7 @@ ui <- navbarPage(
     )
   ),
 
-  # ── Tab 8: Risk Analysis ────────────────────────────────────────────────────
+  # ── Tab 9: Risk Analysis ────────────────────────────────────────────────────
 
   tabPanel("Risk Analysis",
     sidebarLayout(
@@ -376,7 +438,7 @@ ui <- navbarPage(
     )
   ),
 
-  # ── Tab 9: Methodology ─────────────────────────────────────────────────────
+  # ── Tab 10: Methodology ─────────────────────────────────────────────────────
 
   tabPanel("Methodology", methodology_panel())
 )
@@ -1663,6 +1725,168 @@ server <- function(input, output, session) {
       ) +
       scale_y_continuous(labels = scales::percent_format()) +
       scale_color_manual(values = c("Baseline" = "#94a3b8", "Stressed" = "#22d3ee")) +
+      theme_minimal(base_size = 13) +
+      theme(legend.position = "bottom")
+  })
+
+  output$stress_fan_plot <- renderPlot({
+    req(portfolio$analyzed, portfolio$returns)
+    h <- input$stress_fan_horizon
+    ns <- input$stress_fan_n_sims
+    sd <- input$stress_fan_seed
+    fan <- bootstrap_fan_from_returns(
+      portfolio$returns$portfolio_return, h, ns, sd)
+    validate(need(!is.null(fan), "Need a longer return history for the bootstrap fan (at least ~10 days)."))
+
+    sm <- fan$sample_matrix
+    df_line <- bind_rows(lapply(seq_len(nrow(sm)), function(i) {
+      tibble(day = fan$days, cum = sm[i, ], sim = i)
+    }))
+    ribbon <- tibble(
+      day = fan$days,
+      ymin = fan$p05,
+      ymax = fan$p95,
+      mid = fan$p50
+    )
+
+    ggplot() +
+      geom_line(
+        data = df_line, aes(x = day, y = cum, group = sim),
+        alpha = 0.07, color = "#64748b", linewidth = 0.35
+      ) +
+      geom_ribbon(
+        data = ribbon, aes(x = day, ymin = ymin, ymax = ymax),
+        fill = "#22d3ee", alpha = 0.18
+      ) +
+      geom_line(
+        data = ribbon, aes(x = day, y = mid),
+        color = "#0ea5e9", linewidth = 1.05
+      ) +
+      labs(
+        title = "Bootstrap cumulative return fan (portfolio, fixed weights)",
+        subtitle = paste("Median path (teal); 5–95% band;", ns, "simulations ×", h, "days ahead"),
+        x = "Trading days ahead",
+        y = "Cumulative return"
+      ) +
+      scale_y_continuous(labels = scales::percent_format()) +
+      theme_minimal(base_size = 13)
+  })
+
+  # ══════════════════════════════════════════════════════════════════════════
+  # ALLOCATION LAB
+  # ══════════════════════════════════════════════════════════════════════════
+
+  output$alloc_lab_need_analyze <- renderUI({
+    if (isTRUE(portfolio$analyzed)) return(NULL)
+    div(
+      class = "empty-state",
+      p("Run ", tags$b("Analyze Portfolio"), " on ", tags$b("Build Portfolio"),
+        " to compare your weights to alternative constructions.")
+    )
+  })
+
+  alloc_lab_data <- reactive({
+    req(isTRUE(portfolio$analyzed))
+    req(!is.null(portfolio$price_data), !is.null(portfolio$weights_frac))
+    ms <- compute_mu_sigma_annual(portfolio$price_data, names(portfolio$weights_frac))
+    validate(need(
+      !is.null(ms),
+      "Not enough overlapping daily returns to estimate mean and covariance. Widen the analysis window."
+    ))
+    tick <- colnames(ms$Sigma)
+    w0 <- align_weights(portfolio$weights_frac, tick)
+    validate(need(sum(w0) > 1e-12 && length(w0) >= 1L, "Could not align weights to the return sample."))
+
+    method <- input$alloc_method
+    mw <- if (identical(method, "minvar") && !is.null(input$alloc_max_w_pct)) {
+      input$alloc_max_w_pct / 100
+    } else {
+      1
+    }
+    n <- length(w0)
+    if (identical(method, "minvar") && mw < 1 / n - 1e-9) {
+      validate(need(
+        FALSE,
+        paste0(
+          "Max weight must be at least ",
+          sprintf("%.1f%%", 100 / n),
+          " so ", n, " positive weights can sum to 100%."
+        )
+      ))
+    }
+
+    w1 <- propose_allocation(method, ms$Sigma, ms$mu, max_w = mw)
+    w1 <- w1[tick]
+    w1[is.na(w1)] <- 0
+    if (sum(w1) < 1e-12) {
+      w1 <- rep(1 / length(tick), length(tick))
+    } else {
+      w1 <- w1 / sum(w1)
+    }
+    names(w1) <- tick
+
+    list(
+      ms = ms,
+      w0 = w0,
+      w1 = w1,
+      m0 = portfolio_ann_metrics(w0, ms$mu, ms$Sigma),
+      m1 = portfolio_ann_metrics(w1, ms$mu, ms$Sigma)
+    )
+  })
+
+  output$alloc_weights_table <- renderTable({
+    req(isTRUE(portfolio$analyzed))
+    d <- alloc_lab_data()
+    tick <- names(d$w0)
+    tibble(
+      Ticker = tick,
+      `Current %` = sprintf("%.1f", 100 * d$w0),
+      `Proposed %` = sprintf("%.1f", 100 * d$w1[tick]),
+      `Delta (pp)` = sprintf("%+.1f", 100 * (d$w1[tick] - d$w0))
+    )
+  }, striped = TRUE, align = "lrrr", width = "100%")
+
+  output$alloc_metrics_table <- renderTable({
+    req(isTRUE(portfolio$analyzed))
+    d <- alloc_lab_data()
+    f_pct <- function(x) sprintf("%.2f%%", 100 * x)
+    f_sh <- function(x) if (is.na(x)) "—" else sprintf("%.2f", x)
+    tibble(
+      Metric = c("Ann. return", "Ann. volatility", "Sharpe (RF=0)"),
+      Current = c(
+        f_pct(d$m0$ann_return),
+        f_pct(d$m0$ann_vol),
+        f_sh(d$m0$sharpe)
+      ),
+      Proposed = c(
+        f_pct(d$m1$ann_return),
+        f_pct(d$m1$ann_vol),
+        f_sh(d$m1$sharpe)
+      )
+    )
+  }, striped = TRUE, align = "lrr", width = "100%")
+
+  output$alloc_weights_plot <- renderPlot({
+    req(isTRUE(portfolio$analyzed))
+    d <- alloc_lab_data()
+    tick <- names(d$w0)
+    long_df <- tibble(
+      ticker = factor(tick, levels = rev(sort(tick))),
+      Current = d$w0,
+      Proposed = d$w1[tick]
+    ) %>%
+      pivot_longer(-ticker, names_to = "series", values_to = "weight") %>%
+      mutate(series = factor(series, levels = c("Current", "Proposed")))
+
+    ggplot(long_df, aes(x = ticker, y = weight, fill = series)) +
+      geom_col(position = position_dodge(width = 0.85), width = 0.8) +
+      coord_flip() +
+      scale_y_continuous(labels = scales::percent_format(), expand = expansion(mult = c(0, 0.03))) +
+      scale_fill_manual(values = c("Current" = "#94a3b8", "Proposed" = "#22d3ee")) +
+      labs(
+        title = "Weight comparison",
+        x = NULL, y = "Weight", fill = ""
+      ) +
       theme_minimal(base_size = 13) +
       theme(legend.position = "bottom")
   })
